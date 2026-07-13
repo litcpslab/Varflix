@@ -15,11 +15,18 @@
 package at.variabilityanalysisgui.controller;
 
 import java.io.File;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.stream.Collectors;
 
 import at.variabilityanalysisgui.changeTracking.*;
 import at.variabilityanalysisgui.visualization.TreeGraph;
+import javafx.util.StringConverter;
+import com.google.gson.Gson;
+import javafx.scene.control.*;
 import org.controlsfx.control.CheckComboBox;
 
 import constraints.AlternativeGroup;
@@ -30,6 +37,7 @@ import constraints.Implication;
 import constraints.MutualExclusion;
 import constraints.OrRelation;
 import constraints.SimpleConstraint;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -98,7 +106,8 @@ public class ConstraintsViewController {
     @FXML private HBox editButtonBox;
     @FXML private Button infoCloseButton;
     @FXML private TreeView<Constraint> groupTreeView;
-    
+    @FXML private TextArea constraintDescriptionTextArea;
+
     //Menu Buttons
     @FXML private Button proceedButton;
     @FXML private Button addConstraintButton;
@@ -106,7 +115,8 @@ public class ConstraintsViewController {
 
 	@FXML private Button undoButton;
 	@FXML private Button redoButton;
-    
+    @FXML private Button askAiConstraintButton;
+
     private ContextMenu constraintFilterMenu;
     
     private VarflixAPI model;
@@ -114,7 +124,7 @@ public class ConstraintsViewController {
     private List<Feature> features;
     private Feature currentBase;
     private TreeGraph featureGraph;
-    
+
     //private Controller mainController;
     private boolean isGroupView = true;
 
@@ -155,12 +165,12 @@ public class ConstraintsViewController {
     	        });
     	    }
     	});
-    	
+        askAiConstraintButton.setOnAction(this::handleAskAiConstraintAction);
     	groupTreeView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-    	
+
     	KeyCombination undoCombination = new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN);
 		KeyCombination redoCombination = new KeyCodeCombination(KeyCode.Y, KeyCombination.CONTROL_DOWN);
-		
+
 		groupFeatureListView.sceneProperty().addListener((obs, oldScene, newScene) -> {
 			if (newScene != null) {
 				newScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
@@ -172,8 +182,8 @@ public class ConstraintsViewController {
 						event.consume();
 					} else if(KeyCode.DELETE.equals(event.getCode())) {
 						List<TreeItem<Constraint>> selectedItems =
-                                groupTreeView.getSelectionModel().getSelectedItems().stream().filter(Objects::nonNull).toList();
-						
+								new ArrayList<>(groupTreeView.getSelectionModel().getSelectedItems().stream().filter(Objects::nonNull).collect(Collectors.toList()));
+
 						for(TreeItem<Constraint> item: selectedItems) {
 							deleteConstraintItem(item.getValue(), item);
 						}
@@ -182,7 +192,7 @@ public class ConstraintsViewController {
 			}
 		});
     }
-    
+
 	/*
 	 * Method to load the constraints from a file and display items in the GUI 
 	 */
@@ -289,10 +299,7 @@ public class ConstraintsViewController {
 
 			if(shouldBeAdded && !group.getFeatures().contains(addFeature) && !group.getParent().equals(addFeature)) {
 				group.getFeatures().add(addFeature);
-				featureComboBox.getSelectionModel().clearSelection();
-				List<Feature> newList = new ArrayList<>(featureComboBox.getItems());
-				newList.remove(addFeature);
-				featureComboBox.setItems(FXCollections.observableArrayList(newList));
+				featureComboBox.getItems().remove(addFeature);
 				groupFeatureListView.getItems().add(addFeature);
 			}
 			
@@ -305,13 +312,13 @@ public class ConstraintsViewController {
 
 	public void updateConstraintModel(){
         constraints = model.generateModel(currentBase, features, constraints, false);
-        
+
         featureGraph.updateGraph(currentBase);
-        
+
         if(isGroupView) {
         	initializeTreeView(constraints.stream().filter(c -> c instanceof Group).toList());
         }
-        
+
     }
 
 	
@@ -360,7 +367,8 @@ public class ConstraintsViewController {
 	 */
 	@FXML
 	public void handleGenerateAction() {
-        List<Constraint> constraintsList = new ArrayList<>(constraints);
+		List<Constraint> constraintsList = new ArrayList<>();
+		constraintsList.addAll(constraints);
 		model.generateModel(currentBase, features, constraintsList, false);
 		Alert confirmationAlert = new Alert(AlertType.CONFIRMATION, "The model was successfully generated in the file model.uvl!", ButtonType.FINISH);
 		confirmationAlert.setHeaderText("Generation Confirmation");
@@ -403,21 +411,21 @@ public class ConstraintsViewController {
         popupStage.setAlwaysOnTop(true); 
         popupStage.setTitle("Add a constraint!");
         popupStage.setResizable(false);
-		
+
 		ComboBox<String> constraintTypeComboBox = new ComboBox<>(FXCollections.observableArrayList("Implication", "Equivalence", "Mutual Exclusion"));
 		constraintTypeComboBox.setPromptText("Select constraint type");
 		constraintTypeComboBox.setMaxWidth(Double.MAX_VALUE);
-		
+
 		List<Feature> selectableFeatures = features.stream().filter(f -> !(f.getName().startsWith("ALT") || f.getName().startsWith("OR"))).toList();
 		
 		ComboBox<Feature> leftFeatureComboBox = new ComboBox<>(FXCollections.observableArrayList(selectableFeatures));
 		leftFeatureComboBox.setPromptText("Select left feature");
 		leftFeatureComboBox.setMaxWidth(Double.MAX_VALUE);
-		
+
 		ComboBox<Feature> rightFeatureComboBox = new ComboBox<>(FXCollections.observableArrayList(selectableFeatures));
 		rightFeatureComboBox.setPromptText("Select right feature");
 		rightFeatureComboBox.setMaxWidth(Double.MAX_VALUE);
-		
+
 		Button addButton = new Button("Add");
 		addButton.setDefaultButton(true);
 		addButton.setMaxWidth(Double.MAX_VALUE);
@@ -460,15 +468,15 @@ public class ConstraintsViewController {
 		VBox layout = new VBox(12);
 		layout.setPadding(new Insets(20));
 		layout.setAlignment(Pos.TOP_CENTER);
-		layout.getChildren().addAll(new Label("Constraint Type"), constraintTypeComboBox, 
-				new Label("Left Feature"), leftFeatureComboBox, 
+		layout.getChildren().addAll(new Label("Constraint Type"), constraintTypeComboBox,
+				new Label("Left Feature"), leftFeatureComboBox,
 				new Label("Right Feature"), rightFeatureComboBox);
-		
+
 		HBox buttonBar = new HBox(10, addButton);
 		buttonBar.setAlignment(Pos.CENTER_RIGHT);
 		HBox.setHgrow(addButton, Priority.ALWAYS);
 		layout.getChildren().add(buttonBar);
-		
+
 		Scene scene = new Scene(layout);
 		scene.getStylesheets().add(getClass().getResource("/popup.css").toExternalForm());
 		popupStage.setScene(scene);
@@ -528,7 +536,7 @@ public class ConstraintsViewController {
 		typeCheckComboBox.getItems().clear();
 		typeCheckComboBox.getItems().addAll("Or Group", "Alternative");
 	}
-	
+
 	public void deleteConstraintItem(Constraint constraint, TreeItem<Constraint> constraintItem) {
 		if(constraint instanceof SimpleConstraint) {
 			ButtonType yesButton = new ButtonType("Yes");
@@ -550,13 +558,13 @@ public class ConstraintsViewController {
 			ButtonType noButton = new ButtonType("No");
 			Alert removeAlert = new Alert(AlertType.CONFIRMATION, "Should the constraint " + constraint + " be removed?", yesButton, noButton);
 			removeAlert.setHeaderText("Removal Confirmation");
-			
+
 			ButtonType buttonKeepConstraints = new ButtonType("Keep constraints");
-			
+
 			if(constraint instanceof Group) {
 				removeAlert.getButtonTypes().add(buttonKeepConstraints);
 			}
-			 
+
 			Optional<ButtonType> result = removeAlert.showAndWait();
 		    if(result.isPresent() && result.get() == yesButton) {
 				int index = groupTreeView.getRoot().getChildren().indexOf(constraintItem);
@@ -607,6 +615,10 @@ public class ConstraintsViewController {
 		initData();
 	}
 
+    public void setController(Controller controller) {
+        this.mainController = controller;
+    }
+
 	/*
 	 * Initializing the constraints derivation and setting up the window initially
 	 */
@@ -614,27 +626,27 @@ public class ConstraintsViewController {
 		List<Constraint> constraints = model.performFCA();
 		List<Feature> features = model.getFeatures();
 		Feature base = model.getBaseFeature();
-		constraints = model.generateModel(base, features, new ArrayList<>(constraints), true);
+		constraints = model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
 		if(this.constraints != null && this.features != null && currentBase != null) {
-			if(!(this.constraints.equals(constraints) && 
+			if(!(this.constraints.equals(constraints) &&
 					this.features.equals(features) && currentBase.equals(base))) {
 				this.constraints = constraints;
 				this.features = features;
-				currentBase = base;	
-			} 
+				currentBase = base;
+			}
 		} else {
 			this.constraints = constraints;
 			this.features = features;
 			currentBase = base;
 		}
-	
+
 		if(featureGraph == null) {
 			featureGraph = mainController.getFeatureGraph();
 		}
-		
+
 		featureGraph.updateGraph(base);
-		
-		initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));	
+
+		initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));
 		setUpFilterMenu();
 	}
 	
@@ -698,7 +710,7 @@ public class ConstraintsViewController {
 			}
 			
 		});
-		
+
 		CustomMenuItem featureMenuItem = new CustomMenuItem(featureFilterBox, false);
         constraintFilterMenu.getItems().add(featureMenuItem);
         
@@ -781,7 +793,7 @@ public class ConstraintsViewController {
 			
 			TreeItem<Constraint> constraintItem = new TreeItem<>(constraint);
 			button.setOnAction(e -> deleteConstraintItem(constraint, constraintItem));
-			
+
 			constraintItem.setGraphic(button);
 			unfilteredItems.add(constraintItem);
 			root.getChildren().add(constraintItem);
@@ -815,7 +827,7 @@ public class ConstraintsViewController {
 				newConstraints.add(new Implication(f, orGroup.getParent()));
 			}
 		}
-		
+
 		newConstraints.stream().forEach((c) -> {
 			if(!constraints.contains(c)) {
 				constraints.add(c);
@@ -827,6 +839,128 @@ public class ConstraintsViewController {
 	/*
 	 * Helper method to get the list of all features
 	 */
+    @FXML
+    private void handleAskAiConstraintAction(ActionEvent event) {
+        TreeItem<Constraint> selectedItem = groupTreeView.getSelectionModel().getSelectedItem();
+        if (selectedItem == null || selectedItem.getValue() == null) {
+            return;
+        }
+
+        Constraint currentSelectedConstraint = selectedItem.getValue();
+
+        askAiConstraintButton.setDisable(true);
+        askAiConstraintButton.setText("Thinking...");
+
+        String constraintLogic = currentSelectedConstraint.toString();
+
+        StringBuilder contextBuilder = new StringBuilder();
+
+        if (currentSelectedConstraint instanceof Group) {
+            Group gc = (Group) currentSelectedConstraint;
+
+            contextBuilder.append("Parent Feature: ").append(gc.getParent().getName()).append("\n");
+            contextBuilder.append("Parent Description: ").append(getGroup(gc.getParent()).getDescription()).append("\n");
+            contextBuilder.append("Parent Elements: ").append(getFeatureElementsAsString(gc.getParent())).append("\n\n");
+
+            contextBuilder.append("Child Features:\n");
+            for (Feature f : gc.getFeatures()) {
+                contextBuilder.append(f.getName())
+                        .append("\n contains elements: ").append(getFeatureElementsAsString(f))
+                        .append("\n has description: ").append(getGroup(f).getDescription())
+                        .append("\n\n");
+            }
+        } else if (currentSelectedConstraint instanceof SimpleConstraint) {
+            SimpleConstraint sc = (SimpleConstraint) currentSelectedConstraint;
+
+            contextBuilder.append("Feature 1: ").append(sc.getFeature1().getName()).append("\n");
+            contextBuilder.append("Description: ").append(getGroup(sc.getFeature1()).getDescription()).append("\n");
+            contextBuilder.append("Elements: ").append(getFeatureElementsAsString(sc.getFeature1())).append("\n\n");
+
+            contextBuilder.append("Feature 2: ").append(sc.getFeature2().getName()).append("\n");
+            contextBuilder.append("Description: ").append(getGroup(sc.getFeature2()).getDescription()).append("\n");
+            contextBuilder.append("Elements: ").append(getFeatureElementsAsString(sc.getFeature2())).append("\n");
+        }
+
+        String involvedFeaturesContext = contextBuilder.toString();
+
+        Gson gson = new Gson();
+        AiConstraintRequest payload = new AiConstraintRequest(constraintLogic, involvedFeaturesContext, "llama3");
+        String jsonPayload = gson.toJson(payload);
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:8000/api/constraint-chat"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .build();
+
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .thenAccept(responseBody -> {
+                    AiConstraintResponse aiResponse = gson.fromJson(responseBody, AiConstraintResponse.class);
+
+                    Platform.runLater(() -> {
+                        if ("success".equals(aiResponse.status) && aiResponse.reply != null) {
+                            if (constraintDescriptionTextArea != null) {
+                                constraintDescriptionTextArea.setText(aiResponse.reply.constraint_description);
+                            }
+                        }
+
+                        askAiConstraintButton.setDisable(false);
+                        askAiConstraintButton.setText("✨ Explain Constraint");
+                    });
+                })
+                .exceptionally(e -> {
+                    Platform.runLater(() -> {
+                        e.printStackTrace();
+                        askAiConstraintButton.setDisable(false);
+                        askAiConstraintButton.setText("❌ Error");
+                    });
+                    return null;
+                });
+    }
+
+    private String getFeatureElementsAsString(Feature feature) {
+        try {
+            guiModel.Group group = getGroup(feature);
+            if (feature == null || group == null || group.getElements() == null) {
+                return "No elements";
+            }
+            return group.getElements().stream()
+                    .map(e -> {
+                        if (e.getName() != null && e.getName().getValue() != null) {
+                            return e.getName().getValue();
+                        }
+                        return "Unnamed Element";
+                    })
+                    .collect(Collectors.joining(", "));
+        } catch (Exception e) {
+            return "Unable to extract elements";
+        }
+    }
+
+    static class AiConstraintRequest {
+        String constraint_logic;
+        String involved_features_context;
+        String model_name;
+
+        public AiConstraintRequest(String constraint_logic, String involved_features_context, String model_name) {
+            this.constraint_logic = constraint_logic;
+            this.involved_features_context = involved_features_context;
+            this.model_name = model_name;
+        }
+    }
+
+    static class AiConstraintResponse {
+        ConstraintAnalysis reply;
+        String status;
+    }
+
+    static class ConstraintAnalysis {
+        String reasoning;
+        String constraint_description;
+    }
 	public List<Feature> getFeatures(){
 		return features;
 	}
@@ -854,7 +988,7 @@ public class ConstraintsViewController {
 	public boolean getIsGroupView() {
 		return isGroupView;
 	}
-	
+
 	@FXML
 	public void undo() {
 		changeTracker.undo();
@@ -868,16 +1002,27 @@ public class ConstraintsViewController {
 	public ChangeTracker<ConstraintsViewController, ConstraintInfoController> getChangeTracker() {
 		return changeTracker;
 	}
-	
+
 	public void resetSelection() {
 		groupTreeView.getSelectionModel().clearSelection();
 	}
 
 	public void setMainController(Controller controller) {
-		this.mainController = controller;		
+		this.mainController = controller;
 	}
 
 	public void isGroupView(boolean groupView) {
-		isGroupView = groupView;		
+		isGroupView = groupView;
 	}
+
+    private guiModel.Group getGroup(Feature feature) {
+        if (mainController != null && feature != null) {
+            return mainController.getOriginalGroups().stream()
+                    .filter(group -> group.getName() != null && group.getName().get() != null &&
+                            group.getName().get().equals(feature.getName()))
+                    .findFirst()
+                    .orElse(null);
+        }
+        return null;
+    }
 }

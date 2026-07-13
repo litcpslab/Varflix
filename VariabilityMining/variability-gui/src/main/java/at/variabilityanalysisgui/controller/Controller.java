@@ -45,7 +45,7 @@ public class Controller {
     public static final String OCCURRENCE_HEADER_JAVA = "Occurrence:";
     public static final String OCCURRENCE_HEADER_IEC = "Variants:";
     public static final String ELEMENTS_HEADER = "Elements:";
-   
+
     @FXML private FeatureViewController featureViewController;
     @FXML private ConstraintsViewController constraintsViewController;
 
@@ -60,7 +60,6 @@ public class Controller {
     private ExtractionType artifactType = ExtractionType.UNKNOWN;
     private final VarflixAPI model = new VarflixAPI();
     private TreeGraph featureGraph;
-    private Feature currentBase;
 
     public Map<ExtractionType, String> seperatorMap = Map.of(ExtractionType.JAVA, "/", ExtractionType.IEC61499, ";");
 
@@ -76,7 +75,7 @@ public class Controller {
         featureViewController.init();
         constraintsViewController.init();
         constraintsViewController.setMainController(this);
-        
+
         constraintsTab.setOnSelectionChanged(event -> {
         	if(constraintsTab.isSelected()) {
         		constraintsViewController.setModel(model);
@@ -92,7 +91,7 @@ public class Controller {
         	}
         });
 
-        computeFeatureModel();
+        Feature currentBase = computeFeatureModel();
 
         Platform.runLater(()->{
         	featureGraph = new TreeGraph(currentBase);
@@ -105,15 +104,16 @@ public class Controller {
             featureGraph.setSelectionListener(treeViewController::selectAndScrollTo);
             treeViewController.setOnListSelectionChanged(featureId -> featureGraph.highlightNode(featureId));
         });
-        
+
     }
 
-    private void computeFeatureModel() {
-        model.computePCM(originalGroups);
+    public Feature computeFeatureModel(){
+    	model.computePCM(originalGroups);
         List<Constraint> constraints = model.performFCA();
         List<Feature> features = model.getFeatures();
-        currentBase = model.getBaseFeature();
+        Feature currentBase = model.getBaseFeature();
         model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
+        return currentBase;
     }
 
     public void redrawVisualization(){
@@ -201,7 +201,7 @@ public class Controller {
     @FXML
     private void handleExit() {
         Platform.exit();
-    }   
+    }
 
     public static Group findGroupContainingElement(List<Group> groups, Element element) {
         if (groups == null) return null;
@@ -232,6 +232,16 @@ public class Controller {
     public void setArtifactType(ExtractionType artifactType) {
 		this.artifactType = artifactType;
 	}
+    public void changeScene(ActionEvent event) throws IOException {
+    	model.computePCM(originalGroups.stream().filter(group -> !group.getElements().isEmpty()).toList());
+
+    	ConstraintsViewController constraintController = SceneManager.getConstraintsLoader().getController();
+    	constraintController.setModel(model);
+        constraintController.setController(this);
+
+    	Scene scene = ((Node)event.getSource()).getScene();
+    	scene.setRoot((Parent)SceneManager.getConstraintScene());
+    }
 
     public Group findGroupById(int groupId) {
         return getOriginalGroups().stream()
@@ -239,12 +249,16 @@ public class Controller {
                 .findFirst()
                 .orElse(null);
     }
-    
+
     public FeatureViewController getFeatureViewController() {
 		return featureViewController;
 	}
-    
+
     public TreeGraph getFeatureGraph() {
     	return featureGraph;
+    }
+
+    public List<Constraint> getConstraints() {
+        return model.performFCA();
     }
 }

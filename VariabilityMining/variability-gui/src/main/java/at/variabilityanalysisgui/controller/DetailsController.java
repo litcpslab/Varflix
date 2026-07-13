@@ -21,6 +21,8 @@ package at.variabilityanalysisgui.controller;
 import at.variabilityanalysisgui.changeTracking.RenameGroup;
 import at.variabilityanalysisgui.view.DifferenceDirectory;
 import at.variabilityanalysisgui.view.FeatureTreeNode;
+import constraints.Constraint;
+import constraints.SimpleConstraint;
 import guiModel.Difference;
 import guiModel.Element;
 import guiModel.Group;
@@ -31,8 +33,20 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import javafx.application.Platform;
+import javafx.event.ActionEvent;
+import javafx.scene.control.Button;
+import javafx.scene.control.TextField;
+import com.google.gson.Gson;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 public class DetailsController {
 
@@ -41,6 +55,9 @@ public class DetailsController {
     private final ListView<Element> detailSubElementListView;
     private final ScrollPane detailScrollPane;
     private final HBox detailsNameHBox;
+    private final Label detailDescriptionLabel;
+    private final TextArea detailDescriptionTextArea;
+    private final Button detailDescriptionButton;
     private final Label detailLocationLabel;
     private final TextArea detailLocationTextArea;
     private final TextField detailGroupNameTextField;
@@ -54,12 +71,15 @@ public class DetailsController {
     private final ListView<String> detailNamingHistoryListView;
     private final Button detailChangeBackButton;
     private final HBox detailNamingHistoryHBox;
+    private final Button askAiButton;
 
     private TreeItem<FeatureTreeNode> currentDetailItem = null;
 
     public DetailsController(Controller mainController, FeatureViewController featureController, ListView<Element> detailSubElementListView, ScrollPane detailScrollPane,
                              HBox detailsNameHBox, Label detailLocationLabel, TextArea detailLocationTextArea,
-                             TextField detailGroupNameTextField, Button detailChangeNameButton, Label detailOccurrenceLabel, ListView<String> detailOccurrencesListView,
+                             TextField detailGroupNameTextField, Button detailChangeNameButton,
+                             Label detailDescriptionLabel, TextArea detailDescriptionTextArea, Button detailDescriptionButton,
+                             Label detailOccurrenceLabel, ListView<String> detailOccurrencesListView,
                              Label detailElementLabel, TextArea detailElementData, Label detailSubElementLabel, Button detailCloseButton, Label detailNamingHistoryLabel,
                              ListView<String> detailNamingHistoryListView, Button detailChangeBackButton, HBox detailNamingHistoryHBox) {
         this.mainController = mainController;
@@ -67,6 +87,9 @@ public class DetailsController {
         this.detailSubElementListView = detailSubElementListView;
         this.detailScrollPane = detailScrollPane;
         this.detailsNameHBox = detailsNameHBox;
+        this.detailDescriptionLabel = detailDescriptionLabel;
+        this.detailDescriptionTextArea = detailDescriptionTextArea;
+        this.detailDescriptionButton = detailDescriptionButton;
         this.detailLocationLabel = detailLocationLabel;
         this.detailLocationTextArea = detailLocationTextArea;
         this.detailGroupNameTextField = detailGroupNameTextField;
@@ -81,9 +104,13 @@ public class DetailsController {
         this.detailNamingHistoryListView = detailNamingHistoryListView;
         this.detailChangeBackButton = detailChangeBackButton;
         this.detailNamingHistoryHBox = detailNamingHistoryHBox;
+        this.askAiButton = askAiButton;
+
+        this.askAiButton.setOnAction(this::handleAskAiAction);
 
         this.detailChangeNameButton.setOnAction(event -> updateGroupName(false));
         this.detailGroupNameTextField.setOnAction(event -> updateGroupName(false));
+        this.detailDescriptionButton.setOnAction(event -> updateGroupDescription());
         this.detailChangeBackButton.setOnAction(event -> updateGroupName(true));
         // Configure the optional detail elements list view display
         detailSubElementListView.setCellFactory(lv -> new ListCell<>() {
@@ -204,13 +231,19 @@ public class DetailsController {
 			currentDetailItem.setValue(currentTreeNode);
             mainController.redrawVisualization();
             setDetailGroupNameTextField(candidateName);
-		}        
+		}
    	}
+
+    public void updateGroupDescription()  {
+        Group group = (Group) currentDetailItem.getValue().getData();
+        String newDescription = detailDescriptionTextArea.getText();
+        group.setDescription(newDescription);
+    }
 
     public void setDetailGroupNameTextField(String name) {
         detailGroupNameTextField.setText(name);
     }
-    
+
     private boolean isValidName(String candidateName) {
     	Alert errorAlert = new Alert(AlertType.ERROR, "", ButtonType.OK);
 		errorAlert.setHeaderText("Invalid Name Error");
@@ -224,7 +257,7 @@ public class DetailsController {
 		} else if(mainController.getOriginalGroups().stream().anyMatch(group -> group.getName().getValue().equals(candidateName))) {
 			errorAlert.setContentText("The proposed name already exists. Duplicate names are not allowed!");
 		}
-		
+
 		if(!errorAlert.getContentText().isEmpty()) {
 			errorAlert.showAndWait();
 			return false;
@@ -232,9 +265,109 @@ public class DetailsController {
 		
 		return true;
 	}
-    
+
     public TreeItem<FeatureTreeNode> getCurrentDetailItem() {
 		return currentDetailItem;
 	}
+
+    protected void handleAskAiAction(ActionEvent event) {
+        if(currentDetailItem != null && currentDetailItem.getValue() != null && currentDetailItem.getValue().getData() instanceof Group group) {
+            String occurences = String.join("\n", group.getOccurrences());
+            String elements = group.getElements().stream()
+                    .map(element -> element.getName().getValue())
+                    .collect(Collectors.joining("\n"));
+            String constraints = mainController.getConstraints().stream()
+                    .filter(constraint -> {
+                        if (constraint instanceof constraints.Group) {
+                            constraints.Group gc = (constraints.Group) constraint;
+                            return gc.getFeatures().stream().anyMatch(feature -> feature.getName().contains(group.getName().getValue()))
+                                    || gc.getParent().getName().equals(group.getName().getValue());
+                        } else if (constraint instanceof SimpleConstraint) {
+                            SimpleConstraint sc = (SimpleConstraint) constraint;
+                            return sc.getFeature1().getName().equals(group.getName().getValue())
+                                    || sc.getFeature2().getName().equals(group.getName().getValue());
+                        } else {
+                            return false;
+                        }
+                    })
+                    .map(Constraint::toString)
+                    .collect(Collectors.joining("\n"));
+            String old_names = group.getName().getValue() + "\n" + String.join("\n", group.getPreviousNames().stream().toList());
+            String existing_names = mainController.getOriginalGroups().stream()
+                    .map(g -> g.getName().getValue())
+                    .filter(name -> !name.startsWith("Group") && !name.equals("Core"))
+                    .collect(Collectors.joining("\n"));
+
+            if (elements == null || elements.isEmpty()) {
+                return;
+            }
+
+            askAiButton.setDisable(true);
+            askAiButton.setText("Thinking...");
+
+            Gson gson = new Gson();
+            String jsonPayload = gson.toJson(new AiRequest(occurences, elements, constraints, old_names, existing_names, "llama3"));
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://127.0.0.1:8000/api/chat"))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(HttpResponse::body)
+                    .thenAccept(responseBody -> {
+                        AiResponse aiResponse = gson.fromJson(responseBody, AiResponse.class);
+
+                        Platform.runLater(() -> {
+                            if ("success".equals(aiResponse.status) && aiResponse.reply != null) {
+                                detailGroupNameTextField.setText(aiResponse.reply.suggested_name);
+                                detailDescriptionTextArea.setText(aiResponse.reply.short_description);
+                            }
+
+                            askAiButton.setDisable(false);
+                            askAiButton.setText("✨ Ask AI");
+                        });
+                    })
+                    .exceptionally(e -> {
+                        Platform.runLater(() -> {
+                            e.printStackTrace();
+                            askAiButton.setDisable(false);
+                            askAiButton.setText("❌ Error");
+                        });
+                        return null;
+                    });
+        }
+
+    }
+
+    static class AiRequest {
+        String occurrences;
+        String elements;
+        String constraints;
+        String old_names;
+        String existing_names;
+        String model_name = "llama3";
+        public AiRequest(String occurrences, String elements, String constraints,String old_names, String existing_names, String model_name) {
+            this.occurrences = occurrences;
+            this.elements = elements;
+            this.constraints = constraints;
+            this.old_names = old_names;
+            this.existing_names = existing_names;
+            this.model_name = model_name;
+        }
+    }
+
+    static class AiResponse {
+        FeatureAnalysis reply;
+        String status;
+    }
+
+    static class FeatureAnalysis {
+        String suggested_name;
+        String short_description;
+    }
 
 }

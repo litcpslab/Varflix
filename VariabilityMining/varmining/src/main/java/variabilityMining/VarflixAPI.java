@@ -34,13 +34,12 @@ public class VarflixAPI {
 	private FormalConceptAnalysis analysis;
 	
 	private VariabilityModelGenerator generator = new VariabilityModelGenerator();
-	
-	public List<Group> computeInitialGroups(String variantPath, String extractionPath){
-		
-		extractor = new IEC61499VariabilityExtractor();
-		
-		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> initialGroups = extractor.performAutomaticMining(variantPath, extractionPath);
 
+	public List<Group> computeInitialGroups(String variantPath, String extractionPath){
+
+		extractor = new IEC61499VariabilityExtractor();
+
+		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> initialGroups = extractor.performAutomaticMining(variantPath, extractionPath);
 
 		mapper = new DataMapper();
 		
@@ -65,7 +64,7 @@ public class VarflixAPI {
 		
 		return analysis.getConstraints();
 	}
-	
+
 	public List<Feature> getFeatures() {
 		return analysis.getFeatures();
 	}

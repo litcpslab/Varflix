@@ -29,6 +29,7 @@ import java.util.Set;
 public class Group extends Difference {
 	
 	private int id;
+    private String description;
     private Set<String> occurrences;
     private List<Element> elements;
     private ObservableList<String> previousNames = FXCollections.observableArrayList();
@@ -50,18 +51,22 @@ public class Group extends Difference {
     }
 
     public Group() {
-    	
+
     }
 
     public int getId() {
 		return id;
 	}
-    
+
     public Set<String> getOccurrences() {
         return occurrences;
     }
 
-    public List<Element> getElements() {
+    public String getDescription() {
+        return description;
+    }
+
+        public List<Element> getElements() {
         return elements;
     }
 
@@ -105,6 +110,10 @@ public class Group extends Difference {
 
     public void setName(StringProperty name) {
         this.name = name;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
 	@Override

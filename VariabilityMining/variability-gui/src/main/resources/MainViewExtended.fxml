@@ -45,6 +45,7 @@
                         <Label fx:id="detailGroupNameLabel" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" text="Name: " wrapText="true" />
                         <TextField fx:id="detailGroupNameTextField" />
                         <Button fx:id="detailChangeNameButton" mnemonicParsing="false" text="Change Name" />
+                        <Button fx:id="askAiButton" text="✨ Ask AI"/>
                     </children>
                 </HBox>
                 <HBox fx:id="detailNamingHistoryHBox" prefHeight="30.0" prefWidth="200.0">
@@ -58,6 +59,9 @@
                     </children>
                 </HBox>
                 <ListView fx:id="detailNamingHistoryListView" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="100.0" />
+                <Label fx:id="detailDescriptionLabel" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" style="-fx-font-weight: bold;" text="Description" />
+                <TextArea fx:id="detailDescription" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="150.0" prefWidth="200.0" wrapText="true"/>
+                <Button fx:id="detailDescriptionChangeButton" mnemonicParsing="false" text="ChangeDescription"/>
                 <Label fx:id="detailLocationLabel" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" style="-fx-font-weight: bold;" text="Location" />
                 <TextArea fx:id="detailLocationTextArea" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="50.0" prefWidth="200.0" />
                 <Label fx:id="detailOccurrenceLabel" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" style="-fx-font-weight: bold;" text="Occurrences" />
