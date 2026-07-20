@@ -8,5 +8,6 @@
   	<module>datastructures</module>
   	<module>varmining</module>
    	<module>variability-gui</module>
+      <module>variability-llm</module>
   </modules>
 </project>

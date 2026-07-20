@@ -18,6 +18,7 @@
 
 package at.variabilityanalysisgui.controller;
 
+import at.variabilityanalysisai.services.LlmService;
 import at.variabilityanalysisgui.changeTracking.RenameGroup;
 import at.variabilityanalysisgui.view.DifferenceDirectory;
 import at.variabilityanalysisgui.view.FeatureTreeNode;
@@ -35,6 +36,7 @@ import javafx.scene.layout.VBox;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import javafx.application.Platform;
@@ -72,6 +74,7 @@ public class DetailsController {
     private final Button detailChangeBackButton;
     private final HBox detailNamingHistoryHBox;
     private final Button askAiButton;
+    private final LlmService llmService = new LlmService("IEC61499");
 
     private TreeItem<FeatureTreeNode> currentDetailItem = null;
 
@@ -271,7 +274,8 @@ public class DetailsController {
 	}
 
     protected void handleAskAiAction(ActionEvent event) {
-        if(currentDetailItem != null && currentDetailItem.getValue() != null && currentDetailItem.getValue().getData() instanceof Group group) {
+        if (currentDetailItem != null && currentDetailItem.getValue() != null &&
+                currentDetailItem.getValue().getData() instanceof Group group) {
             String occurences = String.join("\n", group.getOccurrences());
             String elements = group.getElements().stream()
                     .map(element -> element.getName().getValue())
@@ -298,76 +302,41 @@ public class DetailsController {
                     .filter(name -> !name.startsWith("Group") && !name.equals("Core"))
                     .collect(Collectors.joining("\n"));
 
-            if (elements == null || elements.isEmpty()) {
-                return;
-            }
-
             askAiButton.setDisable(true);
             askAiButton.setText("Thinking...");
 
-            Gson gson = new Gson();
-            String jsonPayload = gson.toJson(new AiRequest(occurences, elements, constraints, old_names, existing_names, "llama3"));
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    return llmService.suggestNameAndDescription(
+                            group,
+                            controller.getConstraints(),
+                            controller.getOriginalGroups()
+                    );
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }).thenAccept(result -> {
+                Platform.runLater(() -> {
+                    if (result != null) {
+                        detailGroupNameTextField.setText(result.getSuggestedName());
+                        detailDescriptionTextArea.setText(result.getShortDescription());
+                    }
+                    askAiButton.setDisable(false);
+                    askAiButton.setText("✨ Ask AI");
+                });
+            }).exceptionally(e -> {
+                Platform.runLater(() -> {
+                    e.printStackTrace();
+                    askAiButton.setDisable(false);
+                    askAiButton.setText("❌ Error");
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://127.0.0.1:8000/api/chat"))
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .build();
-
-            client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(HttpResponse::body)
-                    .thenAccept(responseBody -> {
-                        AiResponse aiResponse = gson.fromJson(responseBody, AiResponse.class);
-
-                        Platform.runLater(() -> {
-                            if ("success".equals(aiResponse.status) && aiResponse.reply != null) {
-                                detailGroupNameTextField.setText(aiResponse.reply.suggested_name);
-                                detailDescriptionTextArea.setText(aiResponse.reply.short_description);
-                            }
-
-                            askAiButton.setDisable(false);
-                            askAiButton.setText("✨ Ask AI");
-                        });
-                    })
-                    .exceptionally(e -> {
-                        Platform.runLater(() -> {
-                            e.printStackTrace();
-                            askAiButton.setDisable(false);
-                            askAiButton.setText("❌ Error");
-                        });
-                        return null;
-                    });
-        }
-
-    }
-
-    static class AiRequest {
-        String occurrences;
-        String elements;
-        String constraints;
-        String old_names;
-        String existing_names;
-        String model_name = "llama3";
-        public AiRequest(String occurrences, String elements, String constraints,String old_names, String existing_names, String model_name) {
-            this.occurrences = occurrences;
-            this.elements = elements;
-            this.constraints = constraints;
-            this.old_names = old_names;
-            this.existing_names = existing_names;
-            this.model_name = model_name;
+                    Alert alert = new Alert(Alert.AlertType.ERROR,
+                            "AI Analysis failed: " + e.getCause().getMessage(),
+                            ButtonType.OK);
+                    alert.show();
+                });
+                return null;
+            });
         }
     }
-
-    static class AiResponse {
-        FeatureAnalysis reply;
-        String status;
-    }
-
-    static class FeatureAnalysis {
-        String suggested_name;
-        String short_description;
-    }
-
 }

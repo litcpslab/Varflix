@@ -15,13 +15,11 @@
 package at.variabilityanalysisgui.controller;
 
 import java.io.File;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import at.variabilityanalysisai.services.LlmService;
 import at.variabilityanalysisgui.changeTracking.*;
 import at.variabilityanalysisgui.visualization.TreeGraph;
 import javafx.util.StringConverter;
@@ -124,6 +122,7 @@ public class ConstraintsViewController {
     private List<Feature> features;
     private Feature currentBase;
     private TreeGraph featureGraph;
+    private final LlmService llmService = new LlmService("IEC61499");
 
     //private Controller mainController;
     private boolean isGroupView = true;
@@ -851,116 +850,36 @@ public class ConstraintsViewController {
         askAiConstraintButton.setDisable(true);
         askAiConstraintButton.setText("Thinking...");
 
-        String constraintLogic = currentSelectedConstraint.toString();
-
-        StringBuilder contextBuilder = new StringBuilder();
-
-        if (currentSelectedConstraint instanceof Group) {
-            Group gc = (Group) currentSelectedConstraint;
-
-            contextBuilder.append("Parent Feature: ").append(gc.getParent().getName()).append("\n");
-            contextBuilder.append("Parent Description: ").append(getGroup(gc.getParent()).getDescription()).append("\n");
-            contextBuilder.append("Parent Elements: ").append(getFeatureElementsAsString(gc.getParent())).append("\n\n");
-
-            contextBuilder.append("Child Features:\n");
-            for (Feature f : gc.getFeatures()) {
-                contextBuilder.append(f.getName())
-                        .append("\n contains elements: ").append(getFeatureElementsAsString(f))
-                        .append("\n has description: ").append(getGroup(f).getDescription())
-                        .append("\n\n");
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                List<guiModel.Group> originalGroups = controller.getOriginalGroups();
+                return llmService.suggestConstraintDescription(currentSelectedConstraint, originalGroups);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
-        } else if (currentSelectedConstraint instanceof SimpleConstraint) {
-            SimpleConstraint sc = (SimpleConstraint) currentSelectedConstraint;
+        }).thenAccept(result -> {
+            Platform.runLater(() -> {
+                if (constraintDescriptionTextArea != null) {
+                    constraintDescriptionTextArea.setText(result.getConstraintAnalysis());
+                }
+                askAiConstraintButton.setDisable(false);
+                askAiConstraintButton.setText("✨ Ask AI");
+            });
+        }).exceptionally(e -> {
+            Platform.runLater(() -> {
+                e.printStackTrace();
+                askAiConstraintButton.setDisable(false);
+                askAiConstraintButton.setText("❌ Error");
 
-            contextBuilder.append("Feature 1: ").append(sc.getFeature1().getName()).append("\n");
-            contextBuilder.append("Description: ").append(getGroup(sc.getFeature1()).getDescription()).append("\n");
-            contextBuilder.append("Elements: ").append(getFeatureElementsAsString(sc.getFeature1())).append("\n\n");
-
-            contextBuilder.append("Feature 2: ").append(sc.getFeature2().getName()).append("\n");
-            contextBuilder.append("Description: ").append(getGroup(sc.getFeature2()).getDescription()).append("\n");
-            contextBuilder.append("Elements: ").append(getFeatureElementsAsString(sc.getFeature2())).append("\n");
-        }
-
-        String involvedFeaturesContext = contextBuilder.toString();
-
-        Gson gson = new Gson();
-        AiConstraintRequest payload = new AiConstraintRequest(constraintLogic, involvedFeaturesContext, "llama3");
-        String jsonPayload = gson.toJson(payload);
-
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:8000/api/constraint-chat"))
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                .build();
-
-        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(HttpResponse::body)
-                .thenAccept(responseBody -> {
-                    AiConstraintResponse aiResponse = gson.fromJson(responseBody, AiConstraintResponse.class);
-
-                    Platform.runLater(() -> {
-                        if ("success".equals(aiResponse.status) && aiResponse.reply != null) {
-                            if (constraintDescriptionTextArea != null) {
-                                constraintDescriptionTextArea.setText(aiResponse.reply.constraint_description);
-                            }
-                        }
-
-                        askAiConstraintButton.setDisable(false);
-                        askAiConstraintButton.setText("✨ Explain Constraint");
-                    });
-                })
-                .exceptionally(e -> {
-                    Platform.runLater(() -> {
-                        e.printStackTrace();
-                        askAiConstraintButton.setDisable(false);
-                        askAiConstraintButton.setText("❌ Error");
-                    });
-                    return null;
-                });
+                Alert alert = new Alert(Alert.AlertType.ERROR,
+                        "AI Analysis failed: " + e.getCause().getMessage(),
+                        ButtonType.OK);
+                alert.show();
+            });
+            return null;
+        });
     }
 
-    private String getFeatureElementsAsString(Feature feature) {
-        try {
-            guiModel.Group group = getGroup(feature);
-            if (feature == null || group == null || group.getElements() == null) {
-                return "No elements";
-            }
-            return group.getElements().stream()
-                    .map(e -> {
-                        if (e.getName() != null && e.getName().getValue() != null) {
-                            return e.getName().getValue();
-                        }
-                        return "Unnamed Element";
-                    })
-                    .collect(Collectors.joining(", "));
-        } catch (Exception e) {
-            return "Unable to extract elements";
-        }
-    }
-
-    static class AiConstraintRequest {
-        String constraint_logic;
-        String involved_features_context;
-        String model_name;
-
-        public AiConstraintRequest(String constraint_logic, String involved_features_context, String model_name) {
-            this.constraint_logic = constraint_logic;
-            this.involved_features_context = involved_features_context;
-            this.model_name = model_name;
-        }
-    }
-
-    static class AiConstraintResponse {
-        ConstraintAnalysis reply;
-        String status;
-    }
-
-    static class ConstraintAnalysis {
-        String reasoning;
-        String constraint_description;
-    }
 	public List<Feature> getFeatures(){
 		return features;
 	}

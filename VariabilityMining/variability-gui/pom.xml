@@ -87,6 +87,12 @@
           <artifactId>gs-algo</artifactId>
           <version>2.0</version>
       </dependency>
+      <dependency>
+          <groupId>at.jku.cps</groupId>
+          <artifactId>variability-llm</artifactId>
+          <version>0.0.1-SNAPSHOT</version>
+          <scope>compile</scope>
+      </dependency>
   </dependencies>
   
   <build>
