@@ -156,7 +156,7 @@ public class ConstraintsViewController {
 
     	    				@Override
     	    				public void handle(WindowEvent event) {
-    	    					model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
+    	    					model.generateModel();
     	    				}
     	        			
     	        		});
@@ -309,24 +309,23 @@ public class ConstraintsViewController {
         updateConstraintModel();
 	}
 
-	public void updateConstraintModel(){
-        constraints = model.generateModel(currentBase, features, constraints, false);
+    public void updateConstraintModel() {
+        constraints = model.generateModel().getAllConstraints();
 
         featureGraph.updateGraph(currentBase);
 
         if(isGroupView) {
-        	initializeTreeView(constraints.stream().filter(c -> c instanceof Group).toList());
+            initializeTreeView(constraints.stream().filter(c -> c instanceof Group).toList());
         }
-
     }
 
 	
 	/*
 	 * Handling the action performed to remove a group from a feature
-	 */
-	@FXML
-	public void handleRemoveAction(ActionEvent e) {
-		infoController.removeGroupFeature();
+     */
+    @FXML
+    public void handleRemoveAction(ActionEvent e) {
+        infoController.removeGroupFeature();
 		groupTreeView.refresh();
         updateConstraintModel();
 	}
@@ -368,7 +367,7 @@ public class ConstraintsViewController {
 	public void handleGenerateAction() {
 		List<Constraint> constraintsList = new ArrayList<>();
 		constraintsList.addAll(constraints);
-		model.generateModel(currentBase, features, constraintsList, false);
+		model.generateModel();
 		Alert confirmationAlert = new Alert(AlertType.CONFIRMATION, "The model was successfully generated in the file model.uvl!", ButtonType.FINISH);
 		confirmationAlert.setHeaderText("Generation Confirmation");
 		 
@@ -625,7 +624,7 @@ public class ConstraintsViewController {
 		List<Constraint> constraints = model.performFCA();
 		List<Feature> features = model.getFeatures();
 		Feature base = model.getBaseFeature();
-		constraints = model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
+		constraints = model.generateModel().getAllConstraints();
 		if(this.constraints != null && this.features != null && currentBase != null) {
 			if(!(this.constraints.equals(constraints) &&
 					this.features.equals(features) && currentBase.equals(base))) {
@@ -852,7 +851,7 @@ public class ConstraintsViewController {
 
         CompletableFuture.supplyAsync(() -> {
             try {
-                List<guiModel.Group> originalGroups = controller.getOriginalGroups();
+                List<guiModel.Group> originalGroups = mainController.getOriginalGroups();
                 return llmService.suggestConstraintDescription(currentSelectedConstraint, originalGroups);
             } catch (Exception e) {
                 throw new RuntimeException(e);

@@ -18,7 +18,7 @@ import java.util.Objects;
 
 import com.google.gson.annotations.Expose;
 
-public class Feature {
+public class Feature implements Comparable<Feature> {
 
 	@Expose
 	private String name;
@@ -138,4 +138,8 @@ public class Feature {
 	}
 	
 	
+	@Override
+	public int compareTo(Feature other) {
+		return this.name.compareTo(other.name);
+	}
 }

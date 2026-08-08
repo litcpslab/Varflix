@@ -96,7 +96,7 @@ public class VariabilityModelGenerator {
 			
 		List<SimpleConstraint> ctcs = constraints.stream().filter(c -> !coveredConstraints.contains(c) && c instanceof SimpleConstraint).map(c -> (SimpleConstraint) c).toList();
 			
-		UVLGenerator.createUVLModel(root, ctcs);
+		UVLGenerator.createUVLModel(root, ctcs, "output/model.uvl", false);
 		
 		return constraints.stream().filter(c -> (!(c instanceof Implication && ((Implication)c).getFeature2().equals(root)))).collect(Collectors.toList());
 

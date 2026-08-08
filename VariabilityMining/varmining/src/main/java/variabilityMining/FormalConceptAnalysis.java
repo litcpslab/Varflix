@@ -14,22 +14,12 @@ package variabilityMining;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-
-import constraints.AlternativeGroup;
 import constraints.Constraint;
 import constraints.Equivalence;
-import constraints.Group;
 import constraints.Implication;
 import constraints.MutualExclusion;
-import constraints.OrRelation;
 import fr.lirmm.fca4j.algo.AOC_poset_Hermes;
 import fr.lirmm.fca4j.algo.Lattice_AddExtent;
 import fr.lirmm.fca4j.cli.io.MyCSVReader;
@@ -49,14 +39,14 @@ public class FormalConceptAnalysis {
 	private ConceptOrder order;
 	
 	private ConceptOrder fullOrder;
-	
-	private List<Constraint> constraints;
-	
+
+    private List<Constraint> constraints;
 	private List<Feature> features;
 	
 	private Map<Feature, Set<Feature>> implicationMap = new HashMap<>();
 	
 	private Feature base;
+    private List<TreePermutation> groupPermutations = new ArrayList<>();
 	
 	public FormalConceptAnalysis(File file) {
 		this.source = file;
@@ -106,287 +96,27 @@ public class FormalConceptAnalysis {
 			findEquivalences();
 			
 			findImplications();
-			
-			buildImplicationMap();
-			
+
 			findMutualExclusions();
-			
-			List<MutualExclusion> mutEx = constraints.stream().filter(c -> (c instanceof MutualExclusion)).map(c -> (MutualExclusion) c).collect(Collectors.toList());
-			
-			buildAlternativeGroups(mutEx);
-			
-			findOrGroups();
-		
-			filterRedundantConstraints();
+
+            GroupPermutationGenerator groupPermutationGenerator = new GroupPermutationGenerator(context, base, features, constraints);
+
+            groupPermutations = groupPermutationGenerator.generateConstraintPermutations();
+
+
+//          buildImplicationMap();
+
+//			buildAlternativeGroups(constraints, features);
+//
+//			findOrGroups(constraints, features);
+//
+//			filterRedundantConstraints(constraints);
 			
 			ConstraintFileIO.writeConstraintsToFile(new File("constraints.json"), constraints, features, base);
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-	}
-	
-	private void filterRedundantConstraints() {
-		List<Implication> implications = constraints.stream().filter(c -> c instanceof Implication).map(c -> (Implication) c).collect(Collectors.toList());
-		
-		List<AlternativeGroup> alternatives = constraints.stream().filter(c -> (c instanceof AlternativeGroup)).map(c -> (AlternativeGroup) c).collect(Collectors.toList());
-		
-		for(Implication implication: implications) {
-			checkForRedundancy(implication, alternatives);
-			
-			List<Implication> potentialImplications = new ArrayList<>();
-			
-			for(Feature key: implicationMap.keySet()) {
-				if(implicationMap.get(key).contains(implication.getFeature2())) {
-					potentialImplications.add(new Implication(implication.getFeature1(), key));
-				}
-			}
-			
-			for(Implication potentialImplication: potentialImplications) {
-				checkForRedundancy(potentialImplication, alternatives);
-			}
-		}
-		
-		checkForGroupRedundancy(alternatives);	
-	}
-
-	/*
-	 * Checks whether mutual exclusion constraints are already covered by another one or groups by substituting features from implications
-	 */
-	private void checkForRedundancy(Implication implication, List<AlternativeGroup> alternatives) {
-		Feature left = implication.getFeature1();
-
-		Set<MutualExclusion> relevantMutex = constraints.stream().filter(c -> c instanceof MutualExclusion)
-				.map(c -> (MutualExclusion) c).filter(m -> m.getFeature1().equals(left) || m.getFeature2().equals(left)).collect(Collectors.toSet());
-		
-		Set<MutualExclusion> removedMutex = new HashSet<>();
-		
-		for(MutualExclusion mutex: relevantMutex) {
-			MutualExclusion impliedMutex;
-			if(mutex.getFeature1().equals(left)) {
-				impliedMutex = new MutualExclusion(implication.getFeature2(), mutex.getFeature2());
-			} else {
-				impliedMutex = new MutualExclusion(implication.getFeature2(), mutex.getFeature1());
-			}
-			
-			for(AlternativeGroup a: alternatives) {
-				if(a.getFeatures().contains(impliedMutex.getFeature1()) && a.getFeatures().contains(impliedMutex.getFeature2())) {
-					removedMutex.add(mutex);
-				}
-			}
-			
-			Set<MutualExclusion> allMutex = constraints.stream().filter(c -> c instanceof MutualExclusion).map(c -> (MutualExclusion) c).collect(Collectors.toSet());
-			
-			if(!removedMutex.contains(mutex)) {
-				for(MutualExclusion compareMutex: allMutex) {
-					if(compareMutex.getFeature1().equals(impliedMutex.getFeature1()) && compareMutex.getFeature2().equals(impliedMutex.getFeature2()) ||
-							(compareMutex.getFeature1().equals(impliedMutex.getFeature2()) && compareMutex.getFeature2().equals(impliedMutex.getFeature1()))){
-								removedMutex.add(mutex);
-								break;
-							}
-				}
-			}
-		}
-		
-		if(!removedMutex.isEmpty()) {
-			constraints.removeAll(removedMutex);
-		}		
-	}
-
-	private Set<MutualExclusion> checkingMutex = new HashSet<>();
-	
-	private Set<MutualExclusion> removedMutex = new HashSet<>();
-	
-	/*
-	 * Checks whether mutex conditions are already implicitly present through the groupings
-	 */
-	private void checkForGroupRedundancy(List<AlternativeGroup> alternatives) {
-		
-		List<Group> groups = constraints.stream().filter(c -> c instanceof Group).map(c -> (Group) c).collect(Collectors.toList());
-		
-		List<MutualExclusion> allMutex = constraints.stream().filter(c -> c instanceof MutualExclusion).map(c -> (MutualExclusion) c).collect(Collectors.toList());
-		
-		Map<Feature, Group> featureGroupMap = computeFeatureGroupMap(features, groups);
-		
-		for(MutualExclusion mutex: allMutex) {
-			Feature left = mutex.getFeature1();
-			Feature right = mutex.getFeature2();
-			MutualExclusion impliedConstraint = null;
-			Group group = featureGroupMap.get(left);
-			if(group != null) {
-				impliedConstraint = new MutualExclusion(group.getParent(), right);
-				checkimpliedConstraint(alternatives, mutex, impliedConstraint);	
-				Group other = featureGroupMap.get(right);
-				if(other != null) {
-					impliedConstraint = new MutualExclusion(impliedConstraint.getFeature1(), other.getParent());
-					//impliedConstraint.setFeature2(other.getParent());
-					checkimpliedConstraint(alternatives, mutex, impliedConstraint);	
-				}
-			} 
-			group = null;
-			group = featureGroupMap.get(right);
-			if(group != null) {
-				impliedConstraint = new MutualExclusion(left, group.getParent());
-				checkimpliedConstraint(alternatives, mutex, impliedConstraint);	
-				Group other = featureGroupMap.get(left);
-				if(other != null) {
-					impliedConstraint = new MutualExclusion(other.getParent(), impliedConstraint.getFeature2());
-					//impliedConstraint.setFeature1(other.getParent());
-					checkimpliedConstraint(alternatives, mutex, impliedConstraint);	
-				}
-			}
-		}
-		/*
-		for(AlternativeGroup alternative: alternatives) {
-			
-			for(Feature f: alternative.getFeatures()) {
-				if(implicationMap.containsKey(f)) {
-					Set<Feature> implyingFeatures = implicationMap.get(f);
-					for(Feature implyingFeature: implyingFeatures) {
-						
-					}
-				}
-			}
-		}*/
-		
-		for(MutualExclusion mutex: checkingMutex) {
-			if(!removedMutex.contains(mutex)) {
-				for(MutualExclusion compareMutex: allMutex) {
-					if(compareMutex.getFeature1().equals(mutex.getFeature1()) && compareMutex.getFeature2().equals(mutex.getFeature2()) ||
-							(compareMutex.getFeature1().equals(mutex.getFeature2()) && compareMutex.getFeature2().equals(mutex.getFeature1()))){
-						removedMutex.add(compareMutex);
-						break;
-					}
-				}
-			}
-				
-		}
-		
-		if(!removedMutex.isEmpty()) {
-			constraints.removeAll(removedMutex);
-		}
-	}
-
-	private Map<Feature, Group> computeFeatureGroupMap(List<Feature> features, List<Group> groups) {
-		Map<Feature, Group> featureGroupMap = new HashMap<>();
-		
-		for(Group group: groups) {
-			for(Feature feature: group.getFeatures()) {
-				featureGroupMap.put(feature, group);
-			}
-		}
-		
-		return featureGroupMap;		
-	}
-
-	private void checkimpliedConstraint(List<AlternativeGroup> alternatives, MutualExclusion mutex, MutualExclusion impliedConstraint) {
-		if(impliedConstraint != null) {
-			for(AlternativeGroup a: alternatives) {
-				if(a.getFeatures().contains(impliedConstraint.getFeature1()) && a.getFeatures().contains(impliedConstraint.getFeature2())) {
-					removedMutex.add(mutex);
-				}
-			}
-			
-			if(!removedMutex.contains(mutex)) {
-				checkingMutex.add(impliedConstraint);
-			}
-		}
-	}
-
-	private void buildImplicationMap() {
-		
-		List<Implication> implications = constraints.stream().filter(c -> c instanceof Implication).map(c -> (Implication) c).collect(Collectors.toList());
-		
-		for(Implication implication: implications) {
-			
-			if(!implicationMap.containsKey(implication.getFeature2())) {
-				implicationMap.put(implication.getFeature2(), new HashSet<>());
-			}
-			
-			implicationMap.get(implication.getFeature2()).add(implication.getFeature1());
-		}
-	}
-	
-	private void findOrGroups() {
-		
-		Set<Feature> usedFeatures = new HashSet<>();
-		
-		usedFeatures.addAll(constraints.stream().filter(c -> c instanceof AlternativeGroup).map(c -> (AlternativeGroup) c).map(g -> g.getFeatures()).reduce(new ArrayList<>(), (set1, set2) -> {
-		    set1.addAll(set2);
-		    return set1;
-		}));
-				
-		for(Feature key: features) {
-			boolean added = false;
-			if(implicationMap.containsKey(key)) {
-				
-				List<Feature> matchSet = new ArrayList<>();
-				matchSet.addAll(implicationMap.get(key));
-				matchSet.removeAll(usedFeatures);
-				if(matchSet.size() > 1 && isParentFeatureCovered(key, matchSet)) {
-					List<MutualExclusion> mutExs = new ArrayList<>();
-					if(checkAlternativeConnection(matchSet)) {
-						AlternativeGroup alternative = new AlternativeGroup(matchSet, key);
-						if(!constraints.contains(alternative)) {
-							constraints.add(alternative);
-						}
-							
-						mutExs = constraints.stream().filter(c -> c instanceof MutualExclusion).map(c -> (MutualExclusion)c).filter(mutex -> (matchSet.contains(mutex.getFeature1()) && matchSet.contains(mutex.getFeature2()))).collect(Collectors.toList());
-						//TODO check for potentially dead features when adding an alternative
-					} else {
-						OrRelation orRelation = new OrRelation(matchSet, key);
-						if(!constraints.contains(orRelation)) {
-							constraints.add(orRelation);
-						}
-					}
-						
-					usedFeatures.addAll(matchSet);
-					added = true;
-
-					if(added) {
-						Set<Constraint> removedConstraints = constraints.stream().filter(c -> c instanceof Implication).filter(c -> ((Implication) c).getFeature2().equals(key)).collect(Collectors.toSet());
-
-						constraints.removeAll(removedConstraints);
-						constraints.removeAll(mutExs);
-					}			
-				}
-			}
-		}
-	}
-
-	private boolean checkAlternativeConnection(List<Feature> matchSet) {	
-		for(Feature feature: matchSet) {
-			for(Feature other: matchSet) {
-				if(feature != other && !context.getExtent(context.getAttributeIndex(feature.getName())).newIntersect(context.getExtent(context.getAttributeIndex(other.getName()))).isEmpty()) {
-					return false;
-				}
-			}
-		}
-				
-		return true;
-	}
-
-	private boolean isParentFeatureCovered(Feature key, List<Feature> subFeatures) {
-		List<Integer> extents;		
-		
-		if(key.equals(base)) {
-			extents = new ArrayList<>();
-			for(int i = 0; i < context.getObjectCount(); i++) {
-				extents.add(i);
-			}
-		} else {
-			extents = context.getExtent(context.getAttributeIndex(key.getName())).toList();
-		}
-		
-		Set<Integer> subExtents = new HashSet<>();
-		
-		for(Feature feature: subFeatures) {
-			subExtents.addAll(context.getExtent(context.getAttributeIndex(feature.getName())).toList());
-		}
-		
-		extents.removeAll(subExtents);
-		
-		return extents.isEmpty();
 	}
 
 	private void findMutualExclusions() {
@@ -430,146 +160,6 @@ public class FormalConceptAnalysis {
 		}
 		
 		return null;
-	}
-
-	private void buildAlternativeGroups(List<MutualExclusion> mutualExclusions) {
-		Map<Feature, Set<Feature>> mutexMap = new HashMap<>();
-		Set<AlternativeGroup> alternatives = new HashSet<>();
-		Set<Feature> usedFeatures = new HashSet<>();
-		
-		for(MutualExclusion mutex: mutualExclusions) {
-			Feature feature1 = mutex.getFeature1();
-			Feature feature2 = mutex.getFeature2();
-			
-			if(mutexMap.get(feature1) == null && mutexMap.get(feature2) == null) {
-				mutexMap.put(feature1, new HashSet<>());
-				mutexMap.get(feature1).add(feature2);
-			} else if(mutexMap.get(feature1) != null && mutexMap.get(feature2) == null) {
-				mutexMap.get(feature1).add(feature2);
-			} else if(mutexMap.get(feature1) == null && mutexMap.get(feature2) != null) {
-				mutexMap.get(feature2).add(feature1);
-			} else {
-				mutexMap.get(feature1).add(feature2);
-			}
-		}
-		
-		Set<Feature> keySet = mutexMap.keySet();
-		Set<Feature> duplicateKeys = new HashSet<>();
-		
-		for(Feature key: keySet) {
-			Set<Feature> values = new HashSet<>();
-			values.addAll(mutexMap.get(key));
-			values.add(key);
-			if(mutexMap.containsValue(values)) {
-				duplicateKeys.add(key);
-			}
-		}
-		
-		duplicateKeys.stream().forEach(k -> mutexMap.remove(k));
-		
-		for(Feature key: mutexMap.keySet()) {
-			Set<Feature> values = mutexMap.get(key);
-			boolean isGroup = true;
-			
-			Set<Feature> invalidCandidates = new HashSet<>();
-			
-			for(Feature f1: values) {
-				for(Feature f2: values) {
-					if(f1 != f2 && isGroup && !invalidCandidates.contains(f1) && !invalidCandidates.contains(f2)) {
-						MutualExclusion testCondition1 = new MutualExclusion(f1, f2);
-						MutualExclusion testCondition2 = new MutualExclusion(f2, f1);
-						
-						if(!mutualExclusions.contains(testCondition1) && !mutualExclusions.contains(testCondition2)) {
-							if(constraints.contains(new Implication(f1, f2))) {
-								invalidCandidates.add(f1);
-							} else if(constraints.contains(new Implication(f2, f1))) {
-								invalidCandidates.add(f2);
-							} else if(constraints.contains(new Equivalence(f1, f2))) {
-								invalidCandidates.add(f2);
-							} else {
-								isGroup = false;
-							}
-						}
-					}
-				}
-				
-			}
-			
-			values.removeAll(invalidCandidates);
-			
-			if(isGroup) {
-				boolean added = false;
-				for(AlternativeGroup group: alternatives) {
-					Set<String> groupFeatures = group.getFeatures().stream().map(f -> f.getName()).collect(Collectors.toSet());
-					Set<String> valueNames = values.stream().map(f -> f.getName()).collect(Collectors.toSet());
-					
-					if(groupFeatures.containsAll(valueNames) && valueNames.containsAll(groupFeatures)) {
-						group.addFeature(key);
-						added = true;
-						break;
-					} else if(groupFeatures.containsAll(valueNames) && groupFeatures.contains(key.getName())) {
-						added = true;
-						break;
-					}
-				} 
-				
-				if(!added) {
-					
-					List<Feature> reducedValues = new ArrayList<>();
-					
-					reducedValues.add(key);
-					
-					reducedValues.addAll(values);
-					
-					reducedValues.removeAll(usedFeatures);
-					
-					if(reducedValues.size() >= 2) {
-								
-						Feature parent = findParent(reducedValues);
-
-						if(parent.equals(base)) {
-							if(isParentFeatureCovered(base, reducedValues) && !reducedValues.contains(base)){
-								alternatives.add(new AlternativeGroup(reducedValues, base));
-								usedFeatures.addAll(reducedValues);
-							}
-						} else {
-							if(isParentFeatureCovered(parent, reducedValues)){
-								alternatives.add(new AlternativeGroup(reducedValues, parent));
-								usedFeatures.addAll(reducedValues);
-							}
-						}			
-					
-					}
-				}
-			}
-		}
-		
-		//constraints.addAll(alternatives);
-
-		for(AlternativeGroup alternative: alternatives) {
-			if(!constraints.contains(alternative)) {
-				constraints.add(alternative);
-			}
-			List<Feature> features = alternative.getFeatures();
-			List<Implication> implications = constraints.stream().filter(c -> c instanceof Implication).map(c -> (Implication) c).toList();
-			implications = implications.stream().filter(i -> features.contains(i.getFeature1()) && i.getFeature2().equals(alternative.getParent())).toList();
-			
-			List<MutualExclusion> mutExs = mutualExclusions.stream().filter(mutex -> (features.contains(mutex.getFeature1()) && features.contains(mutex.getFeature2()))).collect(Collectors.toList());
-			constraints.removeAll(mutExs);
-			constraints.removeAll(implications);
-		}
-		
-	}
-
-
-	private Feature findParent(List<Feature> reducedValues) {
-		for(Feature key: implicationMap.keySet()) {
-			if(implicationMap.get(key).containsAll(reducedValues)) {
-				return key;
-			}
-		}
-		
-		return base;
 	}
 
 	private void findImplications() {
@@ -624,7 +214,7 @@ public class FormalConceptAnalysis {
 			}
 		}
 	}
-	
+
 	public List<Constraint> getConstraints() {
 		return constraints;
 	}
@@ -636,4 +226,8 @@ public class FormalConceptAnalysis {
 	public Feature getBaseFeature() {
 		return base;
 	}
+
+    public List<TreePermutation> getGroupPermutations() {
+        return groupPermutations;
+    }
 }

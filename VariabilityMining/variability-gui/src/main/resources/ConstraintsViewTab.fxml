@@ -14,6 +14,7 @@
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.text.Text?>
 <?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.control.TextArea?>
 
 <?import org.controlsfx.control.SearchableComboBox?>
 <BorderPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" xmlns="http://javafx.com/javafx/24.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="at.variabilityanalysisgui.controller.ConstraintsViewController">
@@ -100,7 +101,15 @@
                         <Button mnemonicParsing="false" onAction="#handleAddGroupFeatureAction" text="Add" />
                      </children>
                   </HBox>
-                  <Button fx:id="infoCloseButton" text="Close Info" />
+                   <Label style="-fx-font-weight: bold; -fx-font-size: 14px;" text="Constraint Description">
+                       <font>
+                           <Font size="14.0" />
+                       </font>
+                   </Label>
+                   <TextArea fx:id="constraintDescriptionTextArea" prefHeight="100.0" wrapText="true" />
+                   <Button fx:id="askAiConstraintButton" mnemonicParsing="false" text="✨ Explain Constraint" />
+
+                   <Button fx:id="infoCloseButton" text="Close Info" />
                </children>
             </VBox>
          </content>

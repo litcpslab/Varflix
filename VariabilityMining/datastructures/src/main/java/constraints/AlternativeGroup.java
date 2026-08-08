@@ -14,6 +14,7 @@ package constraints;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import variabilityMining.Feature;
 
@@ -42,8 +43,27 @@ public class AlternativeGroup extends Group {
 		
 		return builder.toString();
 	}
-	
-	
-	
 
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(parentFeature != null ? parentFeature.getName() : null, getType());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) return true;
+        if (other == null || getClass() != other.getClass()) return false;
+        AlternativeGroup that = (AlternativeGroup) other;
+
+        String thisParentName = this.parentFeature != null ? this.parentFeature.getName() : "";
+        String thatParentName = that.parentFeature != null ? that.parentFeature.getName() : "";
+        if (!thisParentName.equals(thatParentName)) return false;
+
+        if (!java.util.Objects.equals(this.getType(), that.getType())) return false;
+        if (this.features.size() != that.features.size()) return false;
+
+        List<String> thisNames = this.features.stream().map(Feature::getName).sorted().collect(Collectors.toList());
+        List<String> thatNames = that.features.stream().map(Feature::getName).sorted().collect(Collectors.toList());
+        return thisNames.equals(thatNames);
+    }
 }

@@ -13,8 +13,10 @@
 package variabilityMining;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
+import UVL.UVLGenerator;
 import constraints.Constraint;
 import guiModel.Group;
 import iec61499Mining.DeltaModelGenerator;
@@ -35,6 +37,8 @@ public class VarflixAPI {
 	
 	private VariabilityModelGenerator generator = new VariabilityModelGenerator();
 
+    private PermutationGenerator permutationGenerator = new PermutationGenerator();
+
 	public List<Group> computeInitialGroups(String variantPath, String extractionPath){
 
 		extractor = new IEC61499VariabilityExtractor();
@@ -50,7 +54,7 @@ public class VarflixAPI {
 	
 	public void computePCM(List<Group> editedGroups) {
 		
-		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> updatedGroups = mapper.mapGUIGroupTo1499VariabilityGroup(editedGroups, extractor.getVariants(), extractor.getElements(), ((element) -> new IEC61499Variability(element.getId())), ((variant) -> new IEC61499Variant(variant)));	
+		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> updatedGroups = mapper.mapGUIGroupTo1499VariabilityGroup(editedGroups, extractor.getVariants(), extractor.getElements(), ((element) -> new IEC61499Variability(element.getId())), ((variant) -> new IEC61499Variant(variant)));
 		
 		DeltaModelGenerator.generateDeltas(updatedGroups.stream().map(e -> (JSON1499VariabilityGroup) e).toList(), "output/deltas/");
 		
@@ -59,23 +63,34 @@ public class VarflixAPI {
 	
 	public List<Constraint> performFCA(){
 		analysis = new FormalConceptAnalysis(new File("pcm.csv"));
-		
 		analysis.buildConceptLattice();
-		
-		return analysis.getConstraints();
+		return analysis.getGroupPermutations().get(0).getAllConstraints();
 	}
 
 	public List<Feature> getFeatures() {
-		return analysis.getFeatures();
+		return analysis.getGroupPermutations().get(0).getFeatures();
 	}
 	
 	public Feature getBaseFeature() {
-		return analysis.getBaseFeature();
+		return analysis.getGroupPermutations().get(0).getRoot();
 	}
 	
-	public List<Constraint> generateModel(Feature base, List<Feature> features, List<Constraint> constraints, boolean enableOtherRelations) {
-		List<Constraint> updatedConstraints = generator.generateVariabilityModel(base, features, constraints, enableOtherRelations);
-		DeltaModelGenerator.generateDeltaConfigFile(features, constraints, "output/deltas/");
-		return updatedConstraints;
-	}
+//	public List<Constraint> generateModel(Feature base, List<Feature> features, List<Constraint> constraints) {
+//		List<Constraint> updatedConstraints = generator.generateVariabilityModel(base, features, constraints);
+//		DeltaModelGenerator.generateDeltaConfigFile(features, constraints, "output/deltas/");
+//        return updatedConstraints;
+//	}
+
+    public TreePermutation generateModel() {
+        List<TreePermutation> validTrees = analysis.getGroupPermutations().stream()
+                        .flatMap(t -> permutationGenerator.generatePermutations(t.getRoot(), t.getFeatures(), t.getAllConstraints()).stream())
+                                .toList();
+        permutationGenerator.dumpPermutationsToFile(validTrees, "debug_permutations.txt");
+        List<Constraint> result = new ArrayList<>(validTrees.get(0).getAllConstraints());
+        UVLGenerator.createUVLModel(validTrees.get(0).getRoot(), validTrees.get(0).getCtcs(), "output/model.uvl", false);
+
+        DeltaModelGenerator.generateDeltaConfigFile(validTrees.get(0).getFeatures(), result, "output/deltas/");
+
+        return validTrees.get(0);
+    }
 }

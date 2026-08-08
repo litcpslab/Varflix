@@ -66,9 +66,15 @@ public class FeatureViewController {
 
     @FXML private Button undoButton;
     @FXML private Button redoButton;
-    
+
+
+    @FXML private Label detailDescriptionLabel;
+    @FXML private TextArea detailDescription;
+    @FXML private Button detailDescriptionChangeButton;
+    @FXML private Button askAiButton;
+
     private final InputParser parser = new InputParser();
-	    
+
     private ChangeTracker<FeatureViewController, TreeViewController> changeTracker;
 
     public TreeViewController getTreeViewController() {
@@ -78,11 +84,29 @@ public class FeatureViewController {
 	public void init() {
 		this.treeViewController = new TreeViewController(mainController, this, featureTreeView, hierarchyButtonHBox);
         this.filterController = new FilterController(mainController, this, searchTextField, filterButton);
-        this.detailsController = new DetailsController(mainController, this, detailSubElementListView, detailScrollPane, detailsNameHBox,
-                detailLocationLabel, detailLocationTextArea, detailGroupNameTextField, detailChangeNameButton,
-                detailOccurrenceLabel, detailOccurrencesListView, detailElementLabel, detailElementData,
-                detailSubElementLabel, detailCloseButton, detailNamingHistoryLabel, detailNamingHistoryListView,
-                detailChangeBackButton, detailNamingHistoryHBox);
+        this.detailsController = new DetailsController(mainController,
+                                                        this,
+                                                        detailSubElementListView,
+                                                        detailScrollPane,
+                                                        detailsNameHBox,
+                                                        detailLocationLabel,
+                                                        detailLocationTextArea,
+                                                        detailGroupNameTextField,
+                                                        detailChangeNameButton,
+                                                        detailDescriptionLabel,
+                                                        detailDescription,
+                                                        detailDescriptionChangeButton,
+                                                        detailOccurrenceLabel,
+                                                        detailOccurrencesListView,
+                                                        detailElementLabel,
+                                                        detailElementData,
+                                                        detailSubElementLabel,
+                                                        detailCloseButton,
+                                                        detailNamingHistoryLabel,
+                                                        detailNamingHistoryListView,
+                                                        detailChangeBackButton,
+                                                        detailNamingHistoryHBox,
+                                                        askAiButton);
 
         treeViewController.initializeHierarchyButtons();
         treeViewController.populateTreeView(filterController.getFilteredGroups(), null); // Populate with parsed data

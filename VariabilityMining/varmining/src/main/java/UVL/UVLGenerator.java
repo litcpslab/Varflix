@@ -14,37 +14,41 @@ package UVL;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Writer;
 import java.util.List;
 
 import constraints.SimpleConstraint;
 import variabilityMining.Feature;
 
 public class UVLGenerator {
-	
-	private static final String PATH = "output/model.uvl";
 
-	public static void createUVLModel(Feature root, List<SimpleConstraint> ctcs) {
+	public static void createUVLModel(Feature root, List<SimpleConstraint> ctcs, String path, boolean append) {
 		
-		 try (FileWriter writer = new FileWriter(PATH, false)) { 
+		 try (FileWriter writer = new FileWriter(path, append)) {
 			 
-			writer.write("features\n");
-			
-			processNode(root, writer, 1);
-	        
-			if(!ctcs.isEmpty()) {
-				writer.write("constraints\n");
-			}
-			
-			for(SimpleConstraint constraint: ctcs) {
-				writer.write("\t" + constraint.toString() + "\n");
-			}
+			writeUVLModel(root, ctcs, writer);
 
 	     } catch(IOException e) {
 	    	 e.printStackTrace();
 	     }
 	}
+
+    public static void writeUVLModel(Feature root, List<SimpleConstraint> ctcs, Writer writer) throws IOException {
+
+        writer.write("features\n");
+
+        processNode(root, writer, 1);
+
+        if(!ctcs.isEmpty()) {
+            writer.write("constraints\n");
+        }
+
+        for(SimpleConstraint constraint: ctcs) {
+            writer.write("\t" + constraint.toString() + "\n");
+        }
+    }
 	
-	private static void processNode(Feature current, FileWriter writer, int indentCount) throws IOException {
+	private static void processNode(Feature current, Writer writer, int indentCount) throws IOException {
 		if(current == null) {
 			return;
 		}

@@ -78,13 +78,29 @@ public class DetailsController {
 
     private TreeItem<FeatureTreeNode> currentDetailItem = null;
 
-    public DetailsController(Controller mainController, FeatureViewController featureController, ListView<Element> detailSubElementListView, ScrollPane detailScrollPane,
-                             HBox detailsNameHBox, Label detailLocationLabel, TextArea detailLocationTextArea,
-                             TextField detailGroupNameTextField, Button detailChangeNameButton,
-                             Label detailDescriptionLabel, TextArea detailDescriptionTextArea, Button detailDescriptionButton,
-                             Label detailOccurrenceLabel, ListView<String> detailOccurrencesListView,
-                             Label detailElementLabel, TextArea detailElementData, Label detailSubElementLabel, Button detailCloseButton, Label detailNamingHistoryLabel,
-                             ListView<String> detailNamingHistoryListView, Button detailChangeBackButton, HBox detailNamingHistoryHBox) {
+    public DetailsController(Controller mainController,
+                             FeatureViewController featureController,
+                             ListView<Element> detailSubElementListView,
+                             ScrollPane detailScrollPane,
+                             HBox detailsNameHBox,
+                             Label detailLocationLabel,
+                             TextArea detailLocationTextArea,
+                             TextField detailGroupNameTextField,
+                             Button detailChangeNameButton,
+                             Label detailDescriptionLabel,
+                             TextArea detailDescriptionTextArea,
+                             Button detailDescriptionButton,
+                             Label detailOccurrenceLabel,
+                             ListView<String> detailOccurrencesListView,
+                             Label detailElementLabel,
+                             TextArea detailElementData,
+                             Label detailSubElementLabel,
+                             Button detailCloseButton,
+                             Label detailNamingHistoryLabel,
+                             ListView<String> detailNamingHistoryListView,
+                             Button detailChangeBackButton,
+                             HBox detailNamingHistoryHBox,
+                             Button askAiButton) {
         this.mainController = mainController;
     	this.featureController = featureController;
         this.detailSubElementListView = detailSubElementListView;
@@ -309,8 +325,8 @@ public class DetailsController {
                 try {
                     return llmService.suggestNameAndDescription(
                             group,
-                            controller.getConstraints(),
-                            controller.getOriginalGroups()
+                            mainController.getConstraints(),
+                            mainController.getOriginalGroups()
                     );
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -330,7 +346,7 @@ public class DetailsController {
                     askAiButton.setDisable(false);
                     askAiButton.setText("❌ Error");
 
-                    Alert alert = new Alert(Alert.AlertType.ERROR,
+                    Alert alert = new Alert(AlertType.ERROR,
                             "AI Analysis failed: " + e.getCause().getMessage(),
                             ButtonType.OK);
                     alert.show();
