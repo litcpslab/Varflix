@@ -43,6 +43,7 @@ public class RenameGroup implements ChangeModel<FeatureViewController, TreeViewC
 
             currentDetailItem.setValue(null);
             currentDetailItem.setValue(currentTreeNode);
+            detailsController.setModelFeatureName(newName, oldName);
             detailsController.setDetailGroupNameTextField(oldName);
         }
     
@@ -61,6 +62,7 @@ public class RenameGroup implements ChangeModel<FeatureViewController, TreeViewC
 
             currentDetailItem.setValue(null);
             currentDetailItem.setValue(currentTreeNode);
+            detailsController.setModelFeatureName(oldName, newName);
             detailsController.setDetailGroupNameTextField(newName);
         }
         

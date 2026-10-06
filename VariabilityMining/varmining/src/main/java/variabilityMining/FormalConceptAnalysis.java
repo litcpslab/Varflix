@@ -102,15 +102,6 @@ public class FormalConceptAnalysis {
             GroupPermutationGenerator groupPermutationGenerator = new GroupPermutationGenerator(context, base, features, constraints);
 
             groupPermutations = groupPermutationGenerator.generateConstraintPermutations();
-
-
-//          buildImplicationMap();
-
-//			buildAlternativeGroups(constraints, features);
-//
-//			findOrGroups(constraints, features);
-//
-//			filterRedundantConstraints(constraints);
 			
 			ConstraintFileIO.writeConstraintsToFile(new File("constraints.json"), constraints, features, base);
 

@@ -44,6 +44,7 @@ import javafx.event.ActionEvent;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextField;
 import com.google.gson.Gson;
+import variabilityMining.Feature;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -248,15 +249,22 @@ public class DetailsController {
 			group.getName().setValue(candidateName);
 			currentDetailItem.setValue(null);
 			currentDetailItem.setValue(currentTreeNode);
-            mainController.redrawVisualization();
+            setModelFeatureName(oldName, candidateName);
             setDetailGroupNameTextField(candidateName);
-		}
+            mainController.redrawVisualization();
+        }
    	}
 
     public void updateGroupDescription()  {
         Group group = (Group) currentDetailItem.getValue().getData();
         String newDescription = detailDescriptionTextArea.getText();
         group.setDescription(newDescription);
+    }
+
+    public void setModelFeatureName(String oldName, String newName) {
+        for(Feature feature : mainController.getAllTreeFeaturesByName(oldName)) {
+            feature.setName(newName);
+        }
     }
 
     public void setDetailGroupNameTextField(String name) {

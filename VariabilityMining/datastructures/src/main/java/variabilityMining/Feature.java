@@ -34,7 +34,7 @@ public class Feature implements Comparable<Feature> {
 	private boolean mandatory;
 
 	private boolean isAbstract;
-	
+
 	public Feature(String name) {
 		this.name = name;
 	}
@@ -49,7 +49,11 @@ public class Feature implements Comparable<Feature> {
 	public String getName() {
 		return name;
 	}
-	
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
 	@Override
 	public String toString() {
 		return name;
@@ -87,8 +91,8 @@ public class Feature implements Comparable<Feature> {
 		return isAbstract;
 	}
 
-	public boolean isOptional(){
-        return !mandatory&& !getParent().isAlternativeParent() && !getParent().isOrParent();
+    public boolean isOptional(){
+        return !mandatory && getParent() != null && !getParent().isAlternativeParent() && !getParent().isOrParent();
     }
 	public void setChildren(List<Feature> children) {
 		this.children = children;

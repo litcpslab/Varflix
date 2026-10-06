@@ -34,6 +34,8 @@ public class VarflixAPI {
 	private DataMapper mapper;
 	
 	private FormalConceptAnalysis analysis;
+
+    private List<TreePermutation> permutations;
 	
 	private VariabilityModelGenerator generator = new VariabilityModelGenerator();
 
@@ -74,6 +76,10 @@ public class VarflixAPI {
 	public Feature getBaseFeature() {
 		return analysis.getGroupPermutations().get(0).getRoot();
 	}
+
+    public List<TreePermutation> getPermutations() {
+        return permutations;
+    }
 	
 //	public List<Constraint> generateModel(Feature base, List<Feature> features, List<Constraint> constraints) {
 //		List<Constraint> updatedConstraints = generator.generateVariabilityModel(base, features, constraints);
@@ -81,7 +87,7 @@ public class VarflixAPI {
 //        return updatedConstraints;
 //	}
 
-    public TreePermutation generateModel() {
+    public void generateModel() {
         List<TreePermutation> validTrees = analysis.getGroupPermutations().stream()
                         .flatMap(t -> permutationGenerator.generatePermutations(t.getRoot(), t.getFeatures(), t.getAllConstraints()).stream())
                                 .toList();
@@ -91,6 +97,6 @@ public class VarflixAPI {
 
         DeltaModelGenerator.generateDeltaConfigFile(validTrees.get(0).getFeatures(), result, "output/deltas/");
 
-        return validTrees.get(0);
+        permutations = validTrees;
     }
 }

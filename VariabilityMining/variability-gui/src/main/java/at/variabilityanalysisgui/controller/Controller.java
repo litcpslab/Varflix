@@ -40,6 +40,7 @@ import guiModel.ExtractionType;
 import guiModel.Group;
 import javafx.scene.Node;
 import variabilityMining.Feature;
+import variabilityMining.TreePermutation;
 import variabilityMining.VarflixAPI;
 
 
@@ -72,7 +73,12 @@ public class Controller {
     }
 
     public void init(String variantPath, String extractionPath) {
-        originalGroups = model.computeInitialGroups(variantPath, extractionPath);
+        originalGroups = model.computeInitialGroups();
+        model.computePCM(originalGroups);
+        model.performFCA();
+        model.generateModel();
+        Feature currentBase = model.getPermutations().get(0).getRoot();
+
         artifactType = ExtractionType.IEC61499;		//TODO Change dynamically based on artifacts used
         featureViewController.setMainController(this);
         featureViewController.init();
@@ -96,8 +102,9 @@ public class Controller {
 
         Feature currentBase = computeFeatureModel();
 
+        Feature finalCurrentBase = currentBase;
         Platform.runLater(()->{
-        	featureGraph = new TreeGraph(currentBase);
+        	featureGraph = new TreeGraph(finalCurrentBase);
 
             visualizationWindow.setContent((Node)featureGraph.getViewer());
             visualizationWindow.setFitToWidth(true);
@@ -110,19 +117,8 @@ public class Controller {
 
     }
 
-    public Feature computeFeatureModel(){
-    	model.computePCM(originalGroups);
-        List<Constraint> constraints = model.performFCA();
-        List<Feature> features = model.getFeatures();
-        Feature currentBase = model.getBaseFeature();
-        model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
-        return currentBase;
-    }
-
     public void redrawVisualization(){
-        computeFeatureModel();
-
-        featureGraph.updateGraph(currentBase);
+        featureGraph.updateGraph(model.getPermutations().get(0).getRoot());
     }
 
     @FXML
@@ -263,5 +259,15 @@ public class Controller {
 
     public List<Constraint> getConstraints() {
         return model.performFCA();
+    }
+
+    public List<TreePermutation> getPermutations() {
+        return model.getPermutations();
+    }
+
+    public List<Feature> getAllTreeFeaturesByName(String name) {
+        return model.getPermutations().stream()
+                .map(permutation -> permutation.getFeatureByName(name))
+                .filter(Objects::nonNull).toList();
     }
 }

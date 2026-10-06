@@ -156,7 +156,7 @@ public class ConstraintsViewController {
 
     	    				@Override
     	    				public void handle(WindowEvent event) {
-    	    					model.generateModel();
+//    	    					model.generateModel(); //TODO
     	    				}
     	        			
     	        		});
@@ -310,7 +310,7 @@ public class ConstraintsViewController {
 	}
 
     public void updateConstraintModel() {
-        constraints = model.generateModel().getAllConstraints();
+        constraints = model.getPermutations().get(0).getAllConstraints();
 
         featureGraph.updateGraph(currentBase);
 
@@ -367,7 +367,7 @@ public class ConstraintsViewController {
 	public void handleGenerateAction() {
 		List<Constraint> constraintsList = new ArrayList<>();
 		constraintsList.addAll(constraints);
-		model.generateModel();
+		//TODO
 		Alert confirmationAlert = new Alert(AlertType.CONFIRMATION, "The model was successfully generated in the file model.uvl!", ButtonType.FINISH);
 		confirmationAlert.setHeaderText("Generation Confirmation");
 		 
@@ -623,8 +623,8 @@ public class ConstraintsViewController {
 	private void initData() {
 		List<Constraint> constraints = model.performFCA();
 		List<Feature> features = model.getFeatures();
-		Feature base = model.getBaseFeature();
-		constraints = model.generateModel().getAllConstraints();
+		Feature base = model.getPermutations().get(0).getRoot();
+		constraints = model.getPermutations().get(0).getAllConstraints();
 		if(this.constraints != null && this.features != null && currentBase != null) {
 			if(!(this.constraints.equals(constraints) &&
 					this.features.equals(features) && currentBase.equals(base))) {

@@ -47,6 +47,10 @@ public class Group implements Constraint {
 	public Feature getParent() {
 		return parentFeature;
 	}
+
+    public void setParent(Feature parentFeature) {
+        this.parentFeature = parentFeature;
+    }
 	
 	public String getType() {
 		return type;

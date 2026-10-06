@@ -33,6 +33,7 @@ import javafx.collections.ObservableList;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
+import variabilityMining.TreePermutation;
 
 import java.util.*;
 
@@ -452,6 +453,9 @@ public class TreeViewController {
                 parent.getChildren().remove(item);
                 if(item.getValue().getData() instanceof Group) {
                 	mainController.getOriginalGroups().remove(item.getValue().getData());
+                    for(TreePermutation permutation: mainController.getPermutations()) {
+                        permutation.removeFeatureByName(item.getValue().getData().getName().get());
+                    }
                     mainController.redrawVisualization();
                 }
                 System.out.println("Removed item: " + item.getValue().getDisplayName());
