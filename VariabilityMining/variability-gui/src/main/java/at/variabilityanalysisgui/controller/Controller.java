@@ -53,17 +53,20 @@ public class Controller {
     @FXML private FeatureViewController featureViewController;
     @FXML private ConstraintsViewController constraintsViewController;
 
-    @FXML private ScrollPane visualizationWindow;
+    @FXML private TabPane visualizationTabPane;
     @FXML private TabPane varflixTabPane;
     @FXML private Tab constraintsTab;
 
     @FXML private MenuItem loadItem;
     @FXML private MenuItem saveItem;
 
+
+    public static final int MAX_VISUALIZATION_TABS = 5;
+
     private List<Group> originalGroups;
     private ExtractionType artifactType = ExtractionType.UNKNOWN;
     private final VarflixAPI model = new VarflixAPI();
-    private TreeGraph featureGraph;
+    private final List<TreeGraph> featureGraphs = new ArrayList<>();
 
     public Map<ExtractionType, String> seperatorMap = Map.of(ExtractionType.JAVA, "/", ExtractionType.IEC61499, ";");
 
@@ -86,39 +89,67 @@ public class Controller {
         constraintsViewController.setMainController(this);
 
         constraintsTab.setOnSelectionChanged(event -> {
-        	if(constraintsTab.isSelected()) {
-        		constraintsViewController.setModel(model);
-        		featureViewController.resetSelection();
-        		constraintsViewController.isGroupView(true);
+            if(constraintsTab.isSelected()) {
+                constraintsViewController.setModel(model);
+                featureViewController.resetSelection();
+                constraintsViewController.isGroupView(true);
                 loadItem.setOnAction(e -> constraintsViewController.handleLoadAction());
                 saveItem.setOnAction(e -> constraintsViewController.handleSaveAction());
-        	} else {
-        		constraintsViewController.resetConstraintsViewButtons();
-        		constraintsViewController.resetSelection();
+            } else {
+                constraintsViewController.resetConstraintsViewButtons();
+                constraintsViewController.resetSelection();
                 loadItem.setOnAction(e -> handleLoadAction());
                 saveItem.setOnAction(e -> handleSaveAction());
-        	}
+            }
         });
 
         Feature currentBase = computeFeatureModel();
 
-        Feature finalCurrentBase = currentBase;
-        Platform.runLater(()->{
-        	featureGraph = new TreeGraph(finalCurrentBase);
-
-            visualizationWindow.setContent((Node)featureGraph.getViewer());
-            visualizationWindow.setFitToWidth(true);
-            visualizationWindow.setFitToHeight(true);
-
-            TreeViewController treeViewController = featureViewController.getTreeViewController();
-            featureGraph.setSelectionListener(treeViewController::selectAndScrollTo);
-            treeViewController.setOnListSelectionChanged(featureId -> featureGraph.highlightNode(featureId));
-        });
+        Platform.runLater(this::updateVisualizationTabs);
 
     }
 
+    public void updateVisualizationTabs() {
+        visualizationTabPane.getTabs().clear();
+        featureGraphs.clear();
+
+        List<TreePermutation> permutations = model.getPermutations();
+        if (permutations == null || permutations.isEmpty()) return;
+
+        int tabCount = Math.min(permutations.size(), MAX_VISUALIZATION_TABS);
+        TreeViewController treeViewController = featureViewController.getTreeViewController();
+
+        for (int i = 0; i < tabCount; i++) {
+            TreeGraph graph = new TreeGraph(permutations.get(i).getRoot());
+            featureGraphs.add(graph);
+
+            ScrollPane scrollPane = new ScrollPane();
+            scrollPane.setContent((Node) graph.getViewer());
+            scrollPane.setFitToWidth(true);
+            scrollPane.setFitToHeight(true);
+
+            Tab tab = new Tab("Model " + (i + 1));
+            tab.setClosable(true);
+            tab.setContent(scrollPane);
+            visualizationTabPane.getTabs().add(tab);
+
+            graph.setSelectionListener(featureId -> treeViewController.selectAndScrollTo(featureId));
+        }
+
+        treeViewController.setOnListSelectionChanged(featureId -> {
+            for (TreeGraph graph : featureGraphs) {
+                graph.highlightNode(featureId);
+            }
+        });
+    }
+
     public void redrawVisualization(){
-        featureGraph.updateGraph(model.getPermutations().get(0).getRoot());
+        List<TreePermutation> permutations = model.getPermutations();
+        if (permutations == null || featureGraphs.isEmpty()) return;
+
+        for (int i = 0; i < featureGraphs.size() && i < permutations.size(); i++) {
+            featureGraphs.get(i).updateGraph(permutations.get(i).getRoot());
+        }
     }
 
     @FXML
@@ -254,7 +285,10 @@ public class Controller {
 	}
 
     public TreeGraph getFeatureGraph() {
-    	return featureGraph;
+        if(featureGraphs.isEmpty()) {
+            return null;
+        }
+        return featureGraphs.get(0);
     }
 
     public List<Constraint> getConstraints() {

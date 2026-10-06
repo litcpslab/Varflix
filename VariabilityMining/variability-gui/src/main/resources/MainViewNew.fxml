@@ -112,7 +112,7 @@
             </AnchorPane>
           <AnchorPane minHeight="10.0" minWidth="10.0" prefHeight="160.0" prefWidth="400.0">
                <children>
-                      <ScrollPane fx:id="visualizationWindow" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+                      <TabPane fx:id="visualizationTabPane" tabClosingPolicy="ALL_TABS" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
                </children>
             </AnchorPane>
         </items>
