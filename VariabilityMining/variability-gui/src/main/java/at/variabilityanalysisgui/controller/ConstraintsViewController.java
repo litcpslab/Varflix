@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 
 import at.variabilityanalysisgui.changeTracking.*;
 import at.variabilityanalysisgui.visualization.TreeGraph;
-import javafx.util.StringConverter;
 import org.controlsfx.control.CheckComboBox;
 
 import constraints.AlternativeGroup;
@@ -31,8 +30,6 @@ import constraints.Implication;
 import constraints.MutualExclusion;
 import constraints.OrRelation;
 import constraints.SimpleConstraint;
-import javafx.application.Platform;
-import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -42,7 +39,6 @@ import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -175,8 +171,8 @@ public class ConstraintsViewController {
 						redo();
 						event.consume();
 					} else if(KeyCode.DELETE.equals(event.getCode())) {
-						List<TreeItem<Constraint>> selectedItems = 
-								new ArrayList<>(groupTreeView.getSelectionModel().getSelectedItems().stream().filter(Objects::nonNull).collect(Collectors.toList()));
+						List<TreeItem<Constraint>> selectedItems =
+                                groupTreeView.getSelectionModel().getSelectedItems().stream().filter(Objects::nonNull).toList();
 						
 						for(TreeItem<Constraint> item: selectedItems) {
 							deleteConstraintItem(item.getValue(), item);
@@ -233,7 +229,7 @@ public class ConstraintsViewController {
 	 * Defining the action performed when pressing the add button to add a new feature to a group
 	 */
 	@FXML
-	public void handleAddAction(ActionEvent e) {
+	public void handleAddGroupFeatureAction(ActionEvent e) {
 		Feature addFeature = featureComboBox.getValue();
 		int comboBoxIndex = featureComboBox.getSelectionModel().getSelectedIndex();
 		
@@ -293,7 +289,10 @@ public class ConstraintsViewController {
 
 			if(shouldBeAdded && !group.getFeatures().contains(addFeature) && !group.getParent().equals(addFeature)) {
 				group.getFeatures().add(addFeature);
-				featureComboBox.getItems().remove(addFeature);
+				featureComboBox.getSelectionModel().clearSelection();
+				List<Feature> newList = new ArrayList<>(featureComboBox.getItems());
+				newList.remove(addFeature);
+				featureComboBox.setItems(FXCollections.observableArrayList(newList));
 				groupFeatureListView.getItems().add(addFeature);
 			}
 			
@@ -361,8 +360,7 @@ public class ConstraintsViewController {
 	 */
 	@FXML
 	public void handleGenerateAction() {
-		List<Constraint> constraintsList = new ArrayList<>();
-		constraintsList.addAll(constraints);
+        List<Constraint> constraintsList = new ArrayList<>(constraints);
 		model.generateModel(currentBase, features, constraintsList, false);
 		Alert confirmationAlert = new Alert(AlertType.CONFIRMATION, "The model was successfully generated in the file model.uvl!", ButtonType.FINISH);
 		confirmationAlert.setHeaderText("Generation Confirmation");
@@ -433,16 +431,14 @@ public class ConstraintsViewController {
 				Feature left = leftFeatureComboBox.getValue();
 				Feature right = rightFeatureComboBox.getValue();
 				if (left != right) {
-					SimpleConstraint constraint = null;//new SimpleConstraint(left, right, type);
-					if (type.equals("Implication")) {
-						constraint = new Implication(left, right);
-					} else if (type.equals("Mutual Exclusion")) {
-						constraint = new MutualExclusion(left, right);
-					} else if (type.equals("Equivalence")) {
-						constraint = new Equivalence(left, right);
-					}
+					SimpleConstraint constraint = switch (type) {
+                        case "Implication" -> new Implication(left, right);
+                        case "Mutual Exclusion" -> new MutualExclusion(left, right);
+                        case "Equivalence" -> new Equivalence(left, right);
+                        default -> null;//new SimpleConstraint(left, right, type);
+                    };
 
-					if (constraint != null) {
+                    if (constraint != null) {
 						if (!constraintIsPresent(constraint)) {
 							TreeItem<Constraint> addItem = addSimpleConstraintTreeItem(constraint);
 							changeTracker.addUndo(new AddSimpleConstraint(addItem, groupTreeView.getRoot().getChildren().indexOf(addItem)));
@@ -487,11 +483,7 @@ public class ConstraintsViewController {
 			if(c instanceof SimpleConstraint compareConstraint){
                 if((compareConstraint.getFeature1().equals(constraint.getFeature1()) && compareConstraint.getFeature2().equals(constraint.getFeature2())) ||
 						(compareConstraint.getFeature1().equals(constraint.getFeature2()) && compareConstraint.getFeature2().equals(constraint.getFeature1()))){
-					if(compareConstraint.getType().equals("Implication") && constraint.getType().equals("Equivalence")){
-						return false;
-					} else {
-						return true;
-					}
+                    return !compareConstraint.getType().equals("Implication") || !constraint.getType().equals("Equivalence");
 				}
 			}
 		}
@@ -622,7 +614,7 @@ public class ConstraintsViewController {
 		List<Constraint> constraints = model.performFCA();
 		List<Feature> features = model.getFeatures();
 		Feature base = model.getBaseFeature();
-		constraints = model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
+		constraints = model.generateModel(base, features, new ArrayList<>(constraints), true);
 		if(this.constraints != null && this.features != null && currentBase != null) {
 			if(!(this.constraints.equals(constraints) && 
 					this.features.equals(features) && currentBase.equals(base))) {
@@ -803,10 +795,9 @@ public class ConstraintsViewController {
 	 * Logic to keep the constraints when removing (a feature from) a group
 	 */
 	private void resolveGroupConstraint(Constraint constraint, List<Constraint> newConstraints) {
-		if(constraint instanceof AlternativeGroup) {
-			AlternativeGroup alternative = (AlternativeGroup) constraint;
+		if(constraint instanceof AlternativeGroup alternative) {
 
-			Set<Feature> processed = new HashSet<>();
+            Set<Feature> processed = new HashSet<>();
 			
 			for(Feature f: alternative.getFeatures()) {
 				newConstraints.add(new Implication(f, alternative.getParent()));

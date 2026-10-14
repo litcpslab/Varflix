@@ -51,7 +51,7 @@
                 <ComboBox fx:id="featureComboBox" prefWidth="150.0" />
                 <HBox fx:id="editButtonBox" prefHeight="100.0" prefWidth="200.0">
                     <children>
-                        <Button mnemonicParsing="false" onAction="#handleAddAction" text="Add" />
+                        <Button mnemonicParsing="false" onAction="#handleAddGroupFeatureAction" text="Add" />
                     </children>
                 </HBox>
                 <Button fx:id="infoCloseButton" text="Close Info" />

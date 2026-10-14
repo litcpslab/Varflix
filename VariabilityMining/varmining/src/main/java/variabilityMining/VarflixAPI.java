@@ -13,9 +13,7 @@
 package variabilityMining;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import constraints.Constraint;
 import guiModel.Group;
@@ -37,12 +35,13 @@ public class VarflixAPI {
 	
 	private VariabilityModelGenerator generator = new VariabilityModelGenerator();
 	
-	public List<Group> computeInitialGroups(){
+	public List<Group> computeInitialGroups(String variantPath, String extractionPath){
 		
 		extractor = new IEC61499VariabilityExtractor();
-
-		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> initialGroups = extractor.performAutomaticMining("<Enter path to file with list of variants here>", "<Enter path to file with 1499 diff results here>");
 		
+		List<IVariabilityGroup<IEC61499Variant, IEC61499Variability>> initialGroups = extractor.performAutomaticMining(variantPath, extractionPath);
+
+
 		mapper = new DataMapper();
 		
 		DeltaModelGenerator.generateDeltas(initialGroups.stream().map(e -> (JSON1499VariabilityGroup) e).toList(), "output/deltas/");

@@ -104,6 +104,8 @@ public class TreeViewController {
         TreeItem<FeatureTreeNode> item = findTreeItemByFeatureName(rootNode, featureId);
         if (item == null) return;
 
+        collapseAllGroups();
+
         // expand every parent so the item has a valid row index
         TreeItem<FeatureTreeNode> parent = item.getParent();
         while (parent != null && parent != rootNode) {
@@ -118,7 +120,19 @@ public class TreeViewController {
         if (row >= 0) {
             featureTreeView.scrollTo(row);
         }
+        item.setExpanded(true);
         isSelectingFromGraph = false;
+    }
+
+    private void collapseAllGroups(){
+        TreeItem<FeatureTreeNode> root = featureTreeView.getRoot();
+
+        for(TreeItem<FeatureTreeNode> current: root.getChildren()){
+            if(current.isExpanded()){
+                current.setExpanded(false);
+            }
+        }
+
     }
 
     private TreeItem<FeatureTreeNode> findTreeItemByFeatureName(TreeItem<FeatureTreeNode> node, String featureId) {

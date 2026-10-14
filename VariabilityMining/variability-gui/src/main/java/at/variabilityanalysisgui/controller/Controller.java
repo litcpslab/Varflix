@@ -58,14 +58,19 @@ public class Controller {
 
     private List<Group> originalGroups;
     private ExtractionType artifactType = ExtractionType.UNKNOWN;
-    private VarflixAPI model = new VarflixAPI();
+    private final VarflixAPI model = new VarflixAPI();
     private TreeGraph featureGraph;
+    private Feature currentBase;
 
     public Map<ExtractionType, String> seperatorMap = Map.of(ExtractionType.JAVA, "/", ExtractionType.IEC61499, ";");
 
     @FXML
-    public void initialize() {
-        originalGroups = model.computeInitialGroups();
+    public void initialize(){
+
+    }
+
+    public void init(String variantPath, String extractionPath) {
+        originalGroups = model.computeInitialGroups(variantPath, extractionPath);
         artifactType = ExtractionType.IEC61499;		//TODO Change dynamically based on artifacts used
         featureViewController.setMainController(this);
         featureViewController.init();
@@ -86,13 +91,9 @@ public class Controller {
                 saveItem.setOnAction(e -> handleSaveAction());
         	}
         });
-        
-        model.computePCM(originalGroups);
-        List<Constraint> constraints = model.performFCA();
-        List<Feature> features = model.getFeatures();
-        Feature currentBase = model.getBaseFeature();
-        model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
-        
+
+        computeFeatureModel();
+
         Platform.runLater(()->{
         	featureGraph = new TreeGraph(currentBase);
 
@@ -101,19 +102,23 @@ public class Controller {
             visualizationWindow.setFitToHeight(true);
 
             TreeViewController treeViewController = featureViewController.getTreeViewController();
-            featureGraph.setSelectionListener(featureId -> treeViewController.selectAndScrollTo(featureId));
+            featureGraph.setSelectionListener(treeViewController::selectAndScrollTo);
             treeViewController.setOnListSelectionChanged(featureId -> featureGraph.highlightNode(featureId));
         });
         
     }
-    
-    public void redrawVisualization(){
-    	model.computePCM(originalGroups);
+
+    private void computeFeatureModel() {
+        model.computePCM(originalGroups);
         List<Constraint> constraints = model.performFCA();
         List<Feature> features = model.getFeatures();
-        Feature currentBase = model.getBaseFeature();
+        currentBase = model.getBaseFeature();
         model.generateModel(currentBase, features, new ArrayList<>(constraints), true);
-        
+    }
+
+    public void redrawVisualization(){
+        computeFeatureModel();
+
         featureGraph.updateGraph(currentBase);
     }
 

@@ -39,17 +39,10 @@ public class MainApp extends Application {
             System.err.println("Cannot find FXML file.");
             return;
         }
-        
-        /*TabPane tabPane = new TabPane();
-        
-        Tab tab1 = new Tab("Feature View", SceneManager.getExtractionScene());
-        Tab tab2 = new Tab("Constraints View", SceneManager.getConstraintScene());
-        
-        tab1.setClosable(false);
-        tab2.setClosable(false);
-        
-        tabPane.getTabs().addAll(tab1, tab2);*/
-        FXMLLoader loader = new FXMLLoader(SceneManager.class.getResource("/MainViewNew.fxml"));
+
+        //FXMLLoader loader = new FXMLLoader(SceneManager.class.getResource("/MainViewNew.fxml"));
+        FXMLLoader loader = new FXMLLoader(SceneManager.class.getResource("/StartupWindow.fxml"));
+
         
         Scene scene = new Scene(loader.load(), 900, 700);
         
