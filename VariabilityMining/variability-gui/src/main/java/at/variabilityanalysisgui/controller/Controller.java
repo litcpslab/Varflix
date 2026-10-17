@@ -88,8 +88,16 @@ public class Controller {
         constraintsViewController.init();
         constraintsViewController.setMainController(this);
 
+        visualizationTabPane.getSelectionModel().selectedItemProperty().addListener((observable, oldTab, newTab) -> {
+            Integer permutation = permutationIndexOf(newTab);
+            if (permutation != null) {
+                constraintsViewController.showPermutation(permutation);
+            }
+        });
+
         constraintsTab.setOnSelectionChanged(event -> {
             if(constraintsTab.isSelected()) {
+                constraintsViewController.setPermutationIndex(getSelectedPermutationIndex());
                 constraintsViewController.setModel(model);
                 featureViewController.resetSelection();
                 constraintsViewController.isGroupView(true);
@@ -129,6 +137,7 @@ public class Controller {
             scrollPane.setFitToHeight(true);
 
             Tab tab = new Tab("Model " + (i + 1));
+            tab.setUserData(i);
             tab.setClosable(true);
             tab.setContent(scrollPane);
             visualizationTabPane.getTabs().add(tab);
@@ -145,11 +154,28 @@ public class Controller {
 
     public void redrawVisualization(){
         List<TreePermutation> permutations = model.getPermutations();
-        if (permutations == null || featureGraphs.isEmpty()) return;
-
-        for (int i = 0; i < featureGraphs.size() && i < permutations.size(); i++) {
-            featureGraphs.get(i).updateGraph(permutations.get(i).getRoot());
+        if (permutations != null && !featureGraphs.isEmpty()) {
+            for (int i = 0; i < featureGraphs.size() && i < permutations.size(); i++) {
+                featureGraphs.get(i).updateGraph(permutations.get(i).getRoot());
+            }
         }
+
+        constraintsViewController.updateConstraintModel();
+    }
+
+    public int getSelectedPermutationIndex() {
+        Integer index = permutationIndexOf(visualizationTabPane.getSelectionModel().getSelectedItem());
+        if(index == null) {
+            return 0;
+        }
+        return index;
+    }
+
+    private Integer permutationIndexOf(Tab tab) {
+        if (tab != null && tab.getUserData() instanceof Integer index) {
+            return index;
+        }
+        return null;
     }
 
     @FXML

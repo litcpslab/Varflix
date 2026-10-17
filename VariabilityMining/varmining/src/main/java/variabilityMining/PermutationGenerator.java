@@ -4,9 +4,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import UVL.UVLGenerator;
-import constraints.Constraint;
-import constraints.Group;
-import constraints.SimpleConstraint;
+import constraints.*;
 
 public class PermutationGenerator {
 
@@ -152,8 +150,8 @@ public class PermutationGenerator {
 
 
         if (orphanIndex >= orphans.size()) {
-            currentState.setCtcs(computeCTCs(currentState, allSimpleConstraints));
-            currentState.setGroups(groupConstraints);
+            currentState.setCtcs(computeCTCs(currentState, clonedSimpleConstraints(allSimpleConstraints, currentState.getFeatures())));
+            currentState.setGroups(cloneGroups(groupConstraints, currentState.getFeatures()));
             results.add(currentState);
             return;
         }
@@ -197,7 +195,45 @@ public class PermutationGenerator {
         return candidates;
     }
 
-    private List<SimpleConstraint> computeCTCs(TreePermutation state, List<SimpleConstraint> allConstraints) {
+    private List<Group> cloneGroups(List<Group> template, List<Feature> features) {
+        List<Group> result = new ArrayList<>();
+        for (Group group : template) {
+            List<Feature> members = new ArrayList<>();
+            for (Feature member : group.getFeatures()) {
+                Feature fresh = getFeatureByName(features, member.getName());
+                if (fresh != null) members.add(fresh);
+            }
+            if (group.getParent() == null) continue;
+            Feature parent = getFeatureByName(features, group.getParent().getName());
+            if (parent == null) continue;
+            if (group instanceof AlternativeGroup) {
+                result.add(new AlternativeGroup(members, parent));
+            } else if (group instanceof OrRelation) {
+                result.add(new OrRelation(members, parent));
+            }
+        }
+        return result;
+    }
+
+    private List<SimpleConstraint> clonedSimpleConstraints(List<SimpleConstraint> template, List<Feature> features) {
+        List<SimpleConstraint> result = new ArrayList<>();
+        for (SimpleConstraint constraint : template) {
+            Feature f1 = getFeatureByName(features, constraint.getFeature1().getName());
+            Feature f2 = getFeatureByName(features, constraint.getFeature2().getName());
+            if(constraint instanceof Equivalence) {
+                result.add(new Equivalence(f1, f2));
+            } else if(constraint instanceof Implication) {
+                result.add(new Implication(f1, f2));
+            } else if(constraint instanceof MutualExclusion) {
+                result.add(new MutualExclusion(f1, f2));
+            } else {
+                result.add(new SimpleConstraint(f1, f2, constraint.getType()));
+            }
+        }
+        return result;
+    }
+
+    public static List<SimpleConstraint> computeCTCs(TreePermutation state, List<SimpleConstraint> allConstraints) {
         List<SimpleConstraint> ctcs = new ArrayList<>();
         for (SimpleConstraint c : allConstraints) {
             if (c.getType().equals("Implication")) {
@@ -214,7 +250,7 @@ public class PermutationGenerator {
         return ctcs;
     }
 
-    private boolean isAncestor(Feature child, Feature potentialAncestor) {
+    private static boolean isAncestor(Feature child, Feature potentialAncestor) {
         Feature current = child.getParent();
         while(current != null) {
             if (current.equals(potentialAncestor)) {
@@ -225,7 +261,7 @@ public class PermutationGenerator {
         return false;
     }
 
-    private Feature getFeatureByName(List<Feature> features, String name) {
+    private static Feature getFeatureByName(List<Feature> features, String name) {
         return features.stream().filter(f -> f.getName().equals(name)).findFirst().orElse(null);
     }
 

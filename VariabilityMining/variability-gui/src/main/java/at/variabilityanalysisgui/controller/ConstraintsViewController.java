@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 
 import at.variabilityanalysisai.services.LlmService;
 import at.variabilityanalysisgui.changeTracking.*;
-import at.variabilityanalysisgui.visualization.TreeGraph;
 import javafx.util.StringConverter;
 import com.google.gson.Gson;
 import javafx.scene.control.*;
@@ -76,6 +75,7 @@ import org.controlsfx.control.SearchableComboBox;
 import variabilityMining.ConstraintFileIO;
 import variabilityMining.Feature;
 import variabilityMining.JSONConstraints;
+import variabilityMining.TreePermutation;
 import variabilityMining.VarflixAPI;
 
 public class ConstraintsViewController {
@@ -121,7 +121,8 @@ public class ConstraintsViewController {
     private List<Constraint> constraints;
     private List<Feature> features;
     private Feature currentBase;
-    private TreeGraph featureGraph;
+    private int permutationIndex = 0;
+    private boolean selectionListenerInstalled = false;
     private final LlmService llmService = new LlmService("IEC61499");
 
     //private Controller mainController;
@@ -310,12 +311,27 @@ public class ConstraintsViewController {
 	}
 
     public void updateConstraintModel() {
-        constraints = model.getPermutations().get(0).getAllConstraints();
+        if(model == null) {
+            return;
+        }
 
-        featureGraph.updateGraph(currentBase);
+        List<TreePermutation> permutations = model.getPermutations();
+        if(permutations == null || permutations.isEmpty()) {
+            return;
+        }
+
+        if(permutationIndex < 0 || permutationIndex >= permutations.size()) {
+            permutationIndex = 0;
+        }
+
+        TreePermutation current = permutations.get(permutationIndex);
+        this.constraints = current.getAllConstraints();
+        this.currentBase = current.getRoot();
 
         if(isGroupView) {
-            initializeTreeView(constraints.stream().filter(c -> c instanceof Group).toList());
+            initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));
+        } else {
+            setUpTreeItems(this.constraints.stream().filter(c -> !(c instanceof Group)).collect(Collectors.toList()));
         }
     }
 
@@ -589,6 +605,10 @@ public class ConstraintsViewController {
 	 */
 	private void initializeTreeView(List<Constraint> groups) {
 		setUpTreeItems(groups);
+		if(selectionListenerInstalled) {
+			return;
+		}
+		selectionListenerInstalled = true;
 		
 		groupTreeView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
 			if(oldValue != null) {
@@ -613,6 +633,32 @@ public class ConstraintsViewController {
 		initData();
 	}
 
+	/*
+	 * Switches the displayed constraints to the permutation shown in the given visualization tab.
+	 */
+	public void showPermutation(int index) {
+		setPermutationIndex(index);
+		updateConstraintModel();
+	}
+
+	/*
+	 * Stores which permutation's constraints should be displayed, clamped to the available range.
+	 */
+	public void setPermutationIndex(int index) {
+		if(model != null) {
+			List<TreePermutation> permutations = model.getPermutations();
+			if(permutations != null && !permutations.isEmpty()) {
+				permutationIndex = Math.max(0, Math.min(index, permutations.size() - 1));
+				return;
+			}
+		}
+		permutationIndex = Math.max(0, index);
+	}
+
+	public int getPermutationIndex() {
+		return permutationIndex;
+	}
+
     public void setController(Controller controller) {
         this.mainController = controller;
     }
@@ -621,28 +667,23 @@ public class ConstraintsViewController {
 	 * Initializing the constraints derivation and setting up the window initially
 	 */
 	private void initData() {
-		List<Constraint> constraints = model.performFCA();
-		List<Feature> features = model.getFeatures();
-		Feature base = model.getPermutations().get(0).getRoot();
-		constraints = model.getPermutations().get(0).getAllConstraints();
-		if(this.constraints != null && this.features != null && currentBase != null) {
-			if(!(this.constraints.equals(constraints) &&
-					this.features.equals(features) && currentBase.equals(base))) {
-				this.constraints = constraints;
-				this.features = features;
-				currentBase = base;
-			}
-		} else {
-			this.constraints = constraints;
-			this.features = features;
-			currentBase = base;
+		if(model == null) {
+			return;
 		}
 
-		if(featureGraph == null) {
-			featureGraph = mainController.getFeatureGraph();
+		List<TreePermutation> permutations = model.getPermutations();
+		if(permutations == null || permutations.isEmpty()) {
+			return;
 		}
 
-		featureGraph.updateGraph(base);
+		if(permutationIndex < 0 || permutationIndex >= permutations.size()) {
+			permutationIndex = 0;
+		}
+
+		TreePermutation current = permutations.get(permutationIndex);
+		this.constraints = current.getAllConstraints();
+		this.features = model.getFeatures();
+		this.currentBase = current.getRoot();
 
 		initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));
 		setUpFilterMenu();
