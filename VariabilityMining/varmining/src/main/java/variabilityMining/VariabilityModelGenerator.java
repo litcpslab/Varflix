@@ -12,10 +12,7 @@
 
 package variabilityMining;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import UVL.UVLGenerator;
@@ -152,21 +149,21 @@ public class VariabilityModelGenerator {
 				}
 
 				if(feature.getParent() == null && other.getParent() == null) {
-					if(other.getParent() == null) {
-						altCount++;
-						Feature altParent = new Feature("ALT" + altCount, root);
-						altParent.setAlternativeParent(true);
-						root.addChild(altParent);
-						features.add(altParent);
-						altParent.addChild(feature);
-						feature.setParent(altParent);
-						altParent.addChild(other);
-						other.setParent(altParent);
-						coveredConstraints.add(mutex);
-						constraints.remove(mutex);
-						addedConstraints.add(new AlternativeGroup(altParent.getChildren(), root));
-						continue featureLoop;
-					}
+					altCount++;
+					Feature altParent = new Feature("ALT" + altCount, root);
+					altParent.setAlternativeParent(true);
+					altParent.setAbstract(true);
+					root.addChild(altParent);
+					features.add(altParent);
+					altParent.addChild(feature);
+					feature.setParent(altParent);
+					altParent.addChild(other);
+					other.setParent(altParent);
+					coveredConstraints.add(mutex);
+					constraints.remove(mutex);
+					addedConstraints.add(new AlternativeGroup(altParent.getChildren(), root));
+					continue featureLoop;
+
 				}
 				
 			}
@@ -203,7 +200,7 @@ public class VariabilityModelGenerator {
 		int orCount = 0;
 		altCount = 0;
 		
-		groups.sort((g1, g2) -> g1.getParent().getName().compareTo(g2.getParent().getName()));
+		groups.sort(Comparator.comparing(g -> g.getParent().getName()));
 		
 		List<Feature> groupChildren = new ArrayList<>();
 		
@@ -228,10 +225,10 @@ public class VariabilityModelGenerator {
 			List<Group> childGroups = groupMap.get(parent);
 			
 			for(Group group: childGroups) {
-				group.getFeatures().sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
+				group.getFeatures().sort(Comparator.comparing(Feature::getName));
 			}
 			
-			childGroups.sort((g1, g2) -> g1.getFeatures().get(0).getName().compareTo(g2.getFeatures().get(0).getName()));
+			childGroups.sort(Comparator.comparing(g -> g.getFeatures().get(0).getName()));
 			
 			if(childGroups.size() > 1 || parent.equals(base)) {
 				for(Group group: childGroups) {
@@ -250,8 +247,8 @@ public class VariabilityModelGenerator {
 						parent.addChild(orParent);
 						orParent.setMandatory(true);
 						orParent.setOrParent(true);
-						groupChildren = new ArrayList<>();
-						groupChildren.addAll(group.getFeatures());
+						orParent.setAbstract(true);
+                        groupChildren = new ArrayList<>(group.getFeatures());
 						groupChildren.stream().forEach(f -> f.setParent(orParent));
 						groupChildren.sort((c1,c2) -> c1.getName().compareTo(c2.getName()));
 						orParent.setChildren(groupChildren);
@@ -269,10 +266,10 @@ public class VariabilityModelGenerator {
 						parent.addChild(altParent);
 						altParent.setMandatory(true);
 						altParent.setAlternativeParent(true);
-						groupChildren = new ArrayList<>();
-						groupChildren.addAll(group.getFeatures());
+						altParent.setAbstract(true);
+                        groupChildren = new ArrayList<>(group.getFeatures());
 						groupChildren.stream().forEach(f -> f.setParent(altParent));
-						groupChildren.sort((c1,c2) -> c1.getName().compareTo(c2.getName()));
+						groupChildren.sort(Comparator.comparing(Feature::getName));
 						altParent.setChildren(groupChildren);
 						break;
 					default:
@@ -291,11 +288,10 @@ public class VariabilityModelGenerator {
 					default:
 						break;
 				}
-				
-				groupChildren = new ArrayList<>();
-				groupChildren.addAll(group.getFeatures());
+
+                groupChildren = new ArrayList<>(group.getFeatures());
 				groupChildren.stream().forEach(f -> f.setParent(parent));
-				groupChildren.sort((c1,c2) -> c1.getName().compareTo(c2.getName()));
+				groupChildren.sort(Comparator.comparing(Feature::getName));
 				parent.addChildren(groupChildren);
 			}
 		}

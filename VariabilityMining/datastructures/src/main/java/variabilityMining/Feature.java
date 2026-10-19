@@ -32,6 +32,8 @@ public class Feature {
 	private boolean alternativeParent;
 	
 	private boolean mandatory;
+
+	private boolean isAbstract;
 	
 	public Feature(String name) {
 		this.name = name;
@@ -41,6 +43,7 @@ public class Feature {
 		this.name = name;
 		this.parent = parent;
 		mandatory = false;
+		isAbstract = false;
 	}
 	
 	public String getName() {
@@ -76,7 +79,15 @@ public class Feature {
 		this.mandatory = isMandatory;
 	}
 
-    public boolean isOptional(){
+	public void setAbstract(boolean isAbstract) {
+		this.isAbstract = isAbstract;
+	}
+
+	public boolean isAbstract() {
+		return isAbstract;
+	}
+
+	public boolean isOptional(){
         return !mandatory&& !getParent().isAlternativeParent() && !getParent().isOrParent();
     }
 	public void setChildren(List<Feature> children) {

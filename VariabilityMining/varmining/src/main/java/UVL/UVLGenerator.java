@@ -49,13 +49,12 @@ public class UVLGenerator {
 			return;
 		}
 		
-		if(current.getName().startsWith("ALT") || current.getName().startsWith("OR")) {
+		if(current.isAbstract()) {
 			writer.write("\t".repeat(indentCount) + current.getName() + "  {abstract}\n");
 		} else {
 			writer.write("\t".repeat(indentCount) + current.getName() + "\n");
 		}
-		
-		
+
 		indentCount++;
 		
 		List<Feature> children = current.getChildren();
@@ -64,7 +63,7 @@ public class UVLGenerator {
 			return;
 		}
 		
-		List<Feature> mandatoryChildren = children.stream().filter(f -> f.isMandatory()).toList();
+		List<Feature> mandatoryChildren = children.stream().filter(Feature::isMandatory).toList();
 		
 		if(!mandatoryChildren.isEmpty()) {
 			writer.write("\t".repeat(indentCount) + "mandatory" + "\n");
@@ -90,7 +89,6 @@ public class UVLGenerator {
 			for(Feature optionalChild: optionalChildren) {
 				processNode(optionalChild, writer, indentCount);
 			}
-			indentCount--;
 		}
 	}
 
