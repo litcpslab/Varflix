@@ -34,13 +34,12 @@ public class MainApp extends Application {
 	
     @Override
     public void start(Stage primaryStage) throws IOException {
-        URL fxmlLocation = getClass().getResource("/MainViewNew.fxml");
+        URL fxmlLocation = getClass().getResource("/StartupWindow.fxml");
         if (fxmlLocation == null) {
             System.err.println("Cannot find FXML file.");
             return;
         }
 
-        //FXMLLoader loader = new FXMLLoader(SceneManager.class.getResource("/MainViewNew.fxml"));
         FXMLLoader loader = new FXMLLoader(SceneManager.class.getResource("/StartupWindow.fxml"));
 
         
