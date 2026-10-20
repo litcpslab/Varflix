@@ -412,7 +412,7 @@ public class TreeViewController {
                 Group sourceGroup = findGroupContainingElement(mainController.getOriginalGroups(), element);
                 featureViewController.getChangeTracker().addUndo(new DeleteElement(element, sourceGroup.getElements().indexOf(element), sourceGroup.getId()));
             } else if (data instanceof Group group) {
-                featureViewController.getChangeTracker().addUndo(new DeleteGroup(group, mainController.getOriginalGroups().indexOf(group)));
+                featureViewController.getChangeTracker().addUndo(new DeleteGroup(group, mainController.getOriginalGroups().indexOf(group), mainController));
             }
             for(TreeItem<FeatureTreeNode> child: item.getChildren()) {
             	if(child.getValue().getData() instanceof Element) {

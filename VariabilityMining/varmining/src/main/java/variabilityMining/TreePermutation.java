@@ -173,6 +173,336 @@ public class TreePermutation {
         return constraints;
     }
 
+    public boolean removeConstraint(Constraint constraint) {
+        if (constraint instanceof SimpleConstraint sc) {
+            return ctcs.remove(sc);
+        }
+        if (constraint instanceof Group g) {
+            return removeGroup(g);
+        }
+        return false;
+    }
+
+    public boolean addSimpleConstraint(SimpleConstraint constraint) {
+        if (constraint == null) return false;
+        Feature f1 = constraint.getFeature1();
+        Feature f2 = constraint.getFeature2();
+        if (f1 == null || f2 == null) return false;
+        if (f1.equals(f2)) return false;
+        if (!featuresContains(f1) || !featuresContains(f2)) return false;
+
+        for (Constraint c : getAllConstraints()) {
+            if (c instanceof SimpleConstraint sc) {
+                boolean samePair = (sc.getFeature1().equals(f1) && sc.getFeature2().equals(f2))
+                        || (sc.getFeature1().equals(f2) && sc.getFeature2().equals(f1));
+                if (samePair) {
+                    if (!sc.getType().equals("Implication") || !constraint.getType().equals("Equivalence")) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        ctcs.add(constraint);
+        return true;
+    }
+
+    public List<SimpleConstraint> resolveGroupConstraintsForFeature(Feature feature, Group group) {
+        List<SimpleConstraint> resolved = new ArrayList<>();
+        if (feature == null || group == null) {
+            return resolved;
+        }
+
+        if (group instanceof AlternativeGroup) {
+            for (Feature sibling : group.getFeatures()) {
+                if (!sibling.equals(feature)) {
+                    resolved.add(new MutualExclusion(feature, sibling));
+                }
+            }
+        }
+
+        Feature formerParent = group.getParent();
+        if (formerParent != null && !formerParent.equals(root)) {
+            resolved.add(new Implication(feature, formerParent));
+        }
+
+        return resolved;
+    }
+
+    public boolean removeGroup(Group group) {
+        return removeGroup(group, null, true);
+    }
+
+    public boolean keepGroupConstraints(Group group, List<SimpleConstraint> dissolved) {
+        return removeGroup(group, dissolved, false);
+    }
+
+    public boolean removeFeatureFromGroup(Feature feature, Group group) {
+        return removeFeatureFromGroup(feature, group, false);
+    }
+
+    public boolean removeFeatureFromGroupAndReposition(Feature feature, Group group) {
+        return removeFeatureFromGroup(feature, group, true);
+    }
+
+    private boolean removeFeatureFromGroup(Feature feature, Group group, boolean reposition) {
+        if (feature == null || group == null) return false;
+        if (!groups.contains(group)) return false;
+        if (!containsByName(group.getFeatures(), feature)) return false;
+
+        Feature groupParentBeforeRemoval = group.getParent();
+        List<Feature> remainingMembers = new ArrayList<>(group.getFeatures());
+        remainingMembers.removeIf(f -> f.equals(feature));
+
+        group.getFeatures().removeIf(f -> f.equals(feature));
+        if (feature.getParent() != null && feature.getParent().getChildren() != null) {
+            feature.getParent().getChildren().removeIf(f -> f.equals(feature));
+        }
+        feature.setParent(null);
+
+        if (group.getFeatures().size() <= 1) {
+            groups.remove(group);
+            if (group.getFeatures().size() == 1) {
+                Feature survivor = group.getFeatures().get(0);
+                survivor.setMandatory(true);
+                Feature groupParent = survivor.getParent();
+                if (groupParent != null) {
+                    if (group instanceof AlternativeGroup) {
+                        groupParent.setAlternativeParent(false);
+                    } else {
+                        groupParent.setOrParent(false);
+                    }
+                    if (isSyntheticFeature(groupParent)) {
+                        Feature grandParent = groupParent.getParent();
+                        if (grandParent != null) {
+                            groupParent.getChildren().removeIf(f -> f.equals(survivor));
+                            link(survivor, grandParent);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (reposition) {
+            Feature fallback = findPlacementFallback(groupParentBeforeRemoval);
+            List<Feature> avoidedParents = new ArrayList<>(remainingMembers);
+            if (groupParentBeforeRemoval != null) {
+                avoidedParents.add(groupParentBeforeRemoval);
+            }
+            placeFeature(feature, avoidedParents, false, fallback);
+            if (feature.getParent() == null) {
+                placeNextToGroup(feature, groupParentBeforeRemoval);
+            }
+        }
+
+        pruneSyntheticFeature();
+        normalizeGroups();
+        recomputeCtcs();
+        return true;
+    }
+
+    private Feature findPlacementFallback(Feature groupParent) {
+        Feature fallback = unwrapSyntheticFeature(groupParent);
+        if (fallback == null) {
+            return root;
+        }
+        Feature candidate = fallback;
+        while (candidate.getParent() != null && findGroupWithParent(candidate) != null) {
+            candidate = candidate.getParent();
+        }
+        return candidate;
+    }
+
+    private void placeNextToGroup(Feature feature, Feature groupParent) {
+        Feature parent;
+        if (groupParent == null) {
+            parent = root;
+        } else {
+            parent = groupParent;
+        }
+        Group groupAtParent = findGroupWithParent(parent);
+
+        if (groupAtParent != null) {
+            boolean isAlt = groupAtParent instanceof AlternativeGroup;
+            Feature dummy = createGroupDummy(parent, isAlt);
+            features.add(dummy);
+            link(dummy, parent);
+
+            for (Feature member : new ArrayList<>(groupAtParent.getFeatures())) {
+                link(member, dummy);
+            }
+            groupAtParent.setParent(dummy);
+            parent.setAlternativeParent(false);
+            parent.setOrParent(false);
+        }
+
+        link(feature, parent);
+    }
+
+    public boolean addFeatureToGroup(Feature feature, Group group) {
+        if (feature == null || group == null) return false;
+        if (!featuresContains(feature)) return false;
+        if (!groups.contains(group)) return false;
+        if (containsByName(group.getFeatures(), feature)) return false;
+
+        Feature groupParent = group.getParent();
+        Feature syntheticParent = null;
+
+        //check synthetic parent in between
+        if (!group.getFeatures().isEmpty() && !group.getFeatures().get(0).getParent().equals(groupParent)) {
+            syntheticParent = group.getFeatures().get(0).getParent();
+        }
+        Feature oldParent = feature.getParent();
+        if (oldParent != null && oldParent.getChildren().contains(feature)) {
+            oldParent.getChildren().removeIf(f -> f.equals(feature));
+        }
+        feature.setParent(null);
+
+        Feature attachTo = groupParent;
+        if(syntheticParent != null){
+            attachTo = syntheticParent;
+        }
+
+        if (attachTo != null && featuresContains(attachTo)) {
+            link(feature, attachTo);
+        } else if (root != null) {
+            link(feature, root);
+        }
+
+        group.getFeatures().add(feature);
+        pruneSyntheticFeature();
+        normalizeGroups();
+        recomputeCtcs();
+        return true;
+    }
+
+    private boolean removeGroup(Group group, List<SimpleConstraint> dissolved, boolean reParent) {
+        if (group == null || !groups.contains(group)) return false;
+
+        Feature groupParent = group.getFeatures().get(0).getParent();
+        List<Feature> members = new ArrayList<>(group.getFeatures());
+        boolean isAlt = group instanceof AlternativeGroup;
+
+        groups.remove(group);
+
+        if (reParent && isAlt && members.size() > 1) {
+            addMemberMutexes(members);
+        }
+
+        if (dissolved != null) {
+            for (SimpleConstraint constraint : dissolved) {
+                if (constraint.getFeature1().equals(constraint.getFeature2())) continue;
+                if (!ctcs.contains(constraint)) {
+                    ctcs.add(constraint);
+                }
+            }
+        }
+
+        Feature anchor = unwrapSyntheticFeature(groupParent);
+
+        if (anchor != null && findGroupWithParent(anchor) == null) {
+            if (isAlt) anchor.setAlternativeParent(false);
+            else anchor.setOrParent(false);
+        }
+        if (groupParent != null && !groupParent.equals(anchor) && findGroupWithParent(groupParent) == null) {
+            if (isAlt) groupParent.setAlternativeParent(false);
+            else groupParent.setOrParent(false);
+        }
+
+        if (reParent && members.size() > 1) {
+            Feature fallback;
+            if(anchor == null) {
+                fallback = root;
+            } else {
+                fallback = anchor;
+            }
+            for (Feature member : members) {
+                placeFeature(member, members, false, fallback);
+            }
+        }
+
+        pruneSyntheticFeature();
+        normalizeGroups();
+
+        if (dissolved == null) {
+            recomputeCtcs();
+        } else {
+            ctcs.removeIf(c -> !featuresContains(c.getFeature1()) || !featuresContains(c.getFeature2()));
+        }
+
+        return true;
+    }
+
+    private void addMemberMutexes(List<Feature> members) {
+        for (int i = 0; i < members.size(); i++) {
+            for (int j = i + 1; j < members.size(); j++) {
+                Feature first = members.get(i);
+                Feature second = members.get(j);
+                if (first.equals(second)) continue;
+                if (getFeatureAncestors(first).contains(second) || getFeatureAncestors(second).contains(first)) {
+                    continue;
+                }
+                MutualExclusion mutex = new MutualExclusion(first, second);
+                if (!ctcs.contains(mutex)) {
+                    ctcs.add(mutex);
+                }
+            }
+        }
+    }
+
+    private void pruneSyntheticFeature() {
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (Feature feature : new ArrayList<>(features)) {
+                if (!isSyntheticFeature(feature)) continue;
+
+                Group group;
+                if (feature.getParent() == root) {
+                    group = findGroupWithParent(root);
+                    if (group != null && !feature.getChildren().isEmpty()) continue;
+                } else {
+                    group = findGroupWithParent(feature);
+                    if (group != null) continue;
+                }
+
+                Feature parent = feature.getParent();
+                if (parent == null) continue;
+
+                List<Feature> children = new ArrayList<>(feature.getChildren());
+                for (Feature child : children) {
+                    link(child, parent);
+                }
+                if (parent.getChildren() != null) {
+                    parent.getChildren().removeIf(f -> f.equals(feature));
+                }
+                features.removeIf(f -> f.equals(feature));
+                feature.setAlternativeParent(false);
+                feature.setOrParent(false);
+                feature.setParent(null);
+
+                if (findGroupWithParent(parent) == null) {
+                    parent.setAlternativeParent(false);
+                    parent.setOrParent(false);
+                }
+                changed = true;
+            }
+        }
+    }
+
+    private Feature unwrapSyntheticFeature(Feature feature) {
+        Feature current = feature;
+        while (current != null && isSyntheticFeature(current) && current.getParent() != null) {
+            current = current.getParent();
+        }
+        return current;
+    }
+
+    private boolean isSyntheticFeature(Feature feature) {
+        if (feature == null || feature.getName() == null) return false;
+        return feature.getName().startsWith("ALT") || feature.getName().startsWith("OR");
+    }
+
     // Feature removal
     public boolean removeFeatureByName(String name) {
         Feature feature = getFeatureByName(name);
@@ -377,7 +707,8 @@ public class TreePermutation {
             return newParent;
         }
 
-        if (newParent.isOptional() && newParent.getChildren().size() == 1 && feature.isOptional()) {
+        if (newParent.isOptional() && newParent.getChildren() != null && newParent.getChildren().size() == 1
+                && feature.isOptional() && !newParent.getChildren().contains(feature)) {
             Feature existing = newParent.getChildren().get(0);
             if (existing.isOptional()) {
                 List<Feature> orMembers = new ArrayList<>(newParent.getChildren());
@@ -585,7 +916,9 @@ public class TreePermutation {
         if (parent.getChildren() == null) {
             parent.setChildren(new ArrayList<>());
         }
-        parent.addChild(feature);
+        if (!parent.getChildren().contains(feature)) {
+            parent.addChild(feature);
+        }
     }
 
     private boolean hasMutexToAll(Feature feature, List<Feature> members) {

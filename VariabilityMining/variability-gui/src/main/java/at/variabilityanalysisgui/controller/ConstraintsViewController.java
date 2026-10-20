@@ -17,6 +17,7 @@ package at.variabilityanalysisgui.controller;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import at.variabilityanalysisai.services.LlmService;
@@ -35,6 +36,7 @@ import constraints.MutualExclusion;
 import constraints.OrRelation;
 import constraints.SimpleConstraint;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -44,6 +46,7 @@ import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -252,10 +255,8 @@ public class ConstraintsViewController {
 		}
 		
 		if(constraint instanceof Group group) {
-
-            List<Group> groups = constraints.stream().filter(c -> c instanceof Group).map(c -> ((Group) c)).toList();
-			
-			for(Group g: groups) {
+			TreePermutation current = model.getPermutations().get(permutationIndex);
+			for(Group g: current.getGroups()) {
 				if(g != group && g.getFeatures().contains(addFeature)) {
 					ButtonType yesButton = new ButtonType("Yes");
 					ButtonType noButton = new ButtonType("No");
@@ -266,26 +267,25 @@ public class ConstraintsViewController {
 					Optional<ButtonType> result = warningAlert.showAndWait();
 					featureInGroup = true;
 				    if(result.isPresent() && result.get() == yesButton) {
-				    	g.removeFeature(addFeature);
-						changeTracker.addUndo(new AddConstraintChildSet(addFeature, g, group, new LinkedList<>(), comboBoxIndex));
-
+                        TreePermutation before = current.deepClone();
+                        current.removeFeatureFromGroup(addFeature, g);
+                        current.addFeatureToGroup(addFeature, group);
+                        TreePermutation after = current.deepClone();
+                        changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+                        updateConstraintModel();
+                        if (mainController != null) mainController.redrawVisualization();
 				    } else if(result.isPresent() && result.get() == buttonKeepConstraints) {
-						List<Constraint> newConstraints = new LinkedList<>();
-
-				    	if(group instanceof AlternativeGroup) {
-				    		 
-				    		for(Feature f: g.getFeatures()) {
-				    			if(f != addFeature) {
-									newConstraints.add(new MutualExclusion(addFeature, f));
-				    			}
-				    		}
-				    	}
-
-						newConstraints.add(new Implication(addFeature, g.getParent()));
-				    	g.removeFeature(addFeature);
-						changeTracker.addUndo(new AddConstraintChildSet(addFeature, g, group, newConstraints, comboBoxIndex));
-						constraints.addAll(newConstraints);
-
+                        TreePermutation before = current.deepClone();
+                        List<SimpleConstraint> keptConstraints = current.resolveGroupConstraintsForFeature(addFeature, g);
+                        current.removeFeatureFromGroup(addFeature, g);
+                        current.addFeatureToGroup(addFeature, group);
+                        for(SimpleConstraint keptConstraint : keptConstraints) {
+                            current.addSimpleConstraint(keptConstraint);
+                        }
+                        TreePermutation after = current.deepClone();
+                        changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+                        updateConstraintModel();
+                        if (mainController != null) mainController.redrawVisualization();
 				    } else {
 				    	shouldBeAdded = false;
 				    }
@@ -294,13 +294,23 @@ public class ConstraintsViewController {
 
 			}
 			if (!featureInGroup) {
-				changeTracker.addUndo(new AddConstraintChild(addFeature, group, comboBoxIndex));
+                TreePermutation before = current.deepClone();
+                current.addFeatureToGroup(addFeature, group);
+                TreePermutation after = current.deepClone();
+                changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+                updateConstraintModel();
+                if (mainController != null) mainController.redrawVisualization();
+                featureComboBox.getItems().remove(addFeature);
+                groupTreeView.refresh();
+                featureComboBox.setValue(null);
 			}
 
 			if(shouldBeAdded && !group.getFeatures().contains(addFeature) && !group.getParent().equals(addFeature)) {
-				group.getFeatures().add(addFeature);
-				featureComboBox.getItems().remove(addFeature);
-				groupFeatureListView.getItems().add(addFeature);
+				if (!featureInGroup) {
+					group.getFeatures().add(addFeature);
+					featureComboBox.getItems().remove(addFeature);
+					groupFeatureListView.getItems().add(addFeature);
+				}
 			}
 			
 		} 
@@ -327,6 +337,7 @@ public class ConstraintsViewController {
         TreePermutation current = permutations.get(permutationIndex);
         this.constraints = current.getAllConstraints();
         this.currentBase = current.getRoot();
+        this.features = current.getFeatures();
 
         if(isGroupView) {
             initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));
@@ -342,8 +353,38 @@ public class ConstraintsViewController {
     @FXML
     public void handleRemoveAction(ActionEvent e) {
         infoController.removeGroupFeature();
-		groupTreeView.refresh();
-        updateConstraintModel();
+	}
+	public boolean removeFeatureFromSelectedGroup(Group group, Feature feature) {
+		TreePermutation current = model.getPermutations().get(permutationIndex);
+		if(current == null || group == null || feature == null) {
+			return false;
+		}
+
+		TreePermutation before = current.deepClone();
+		if(!current.removeFeatureFromGroupAndReposition(feature, group)) {
+			return false;
+		}
+		TreePermutation after = current.deepClone();
+
+		changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+		updateConstraintModel();
+		if(mainController != null) {
+			mainController.redrawVisualization();
+		}
+
+		boolean groupStillExists = current.getGroups().stream().anyMatch(g -> g.equals(group));
+		if(groupStillExists) {
+			for(TreeItem<Constraint> item : groupTreeView.getRoot().getChildren()) {
+				if(item.getValue().equals(group)) {
+					groupTreeView.getSelectionModel().clearSelection();
+					groupTreeView.getSelectionModel().select(item);
+					break;
+				}
+			}
+		} else {
+			infoController.hideInfoPane();
+		}
+		return true;
 	}
 	
 	/*
@@ -430,7 +471,7 @@ public class ConstraintsViewController {
 		constraintTypeComboBox.setPromptText("Select constraint type");
 		constraintTypeComboBox.setMaxWidth(Double.MAX_VALUE);
 
-		List<Feature> selectableFeatures = features.stream().filter(f -> !(f.getName().startsWith("ALT") || f.getName().startsWith("OR"))).toList();
+		List<Feature> selectableFeatures = getSelectedFeatures().stream().filter(f -> !(f.getName().startsWith("ALT") || f.getName().startsWith("OR"))).toList();
 		
 		ComboBox<Feature> leftFeatureComboBox = new ComboBox<>(FXCollections.observableArrayList(selectableFeatures));
 		leftFeatureComboBox.setPromptText("Select left feature");
@@ -460,8 +501,19 @@ public class ConstraintsViewController {
                         default -> null;//new SimpleConstraint(left, right, type);
                     };
 
-                    if (constraint != null) {
-						if (!constraintIsPresent(constraint)) {
+					if (constraint != null) {
+						TreePermutation current = model.getPermutations().get(permutationIndex);
+						if (current != null && !constraintIsPresent(constraint)) {
+							TreePermutation before = current.deepClone();
+							if (current.addSimpleConstraint(constraint)) {
+								TreePermutation after = current.deepClone();
+								changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+								updateConstraintModel();
+								if (mainController != null) {
+									mainController.redrawVisualization();
+								}
+							}
+						} else if (!constraintIsPresent(constraint)) {
 							TreeItem<Constraint> addItem = addSimpleConstraintTreeItem(constraint);
 							changeTracker.addUndo(new AddSimpleConstraint(addItem, groupTreeView.getRoot().getChildren().indexOf(addItem)));
 						}
@@ -501,16 +553,17 @@ public class ConstraintsViewController {
 
 	private boolean constraintIsPresent(SimpleConstraint constraint) {
 
-		for(Constraint c: constraints){
+		for(Constraint c: model.getPermutations().get(permutationIndex).getAllConstraints()) {
 			if(c instanceof SimpleConstraint compareConstraint){
                 if((compareConstraint.getFeature1().equals(constraint.getFeature1()) && compareConstraint.getFeature2().equals(constraint.getFeature2())) ||
-						(compareConstraint.getFeature1().equals(constraint.getFeature2()) && compareConstraint.getFeature2().equals(constraint.getFeature1()))){
-                    return !compareConstraint.getType().equals("Implication") || !constraint.getType().equals("Equivalence");
-				}
+						(compareConstraint.getFeature1().equals(constraint.getFeature2()) && compareConstraint.getFeature2().equals(constraint.getFeature1())
+                        && !(compareConstraint instanceof Implication))) {
+                    return true;
+                }
 			}
 		}
 
-		return true;
+		return false;
 	}
 
 	public TreeItem<Constraint> addSimpleConstraintTreeItem(Constraint constraint) {
@@ -560,12 +613,7 @@ public class ConstraintsViewController {
 
 			Optional<ButtonType> result = removeAlert.showAndWait();
 			if(result.isPresent() && result.get() == yesButton) {
-				int index = groupTreeView.getRoot().getChildren().indexOf(constraintItem);
-				groupTreeView.getRoot().getChildren().remove(constraintItem);
-				constraints.remove(constraintItem.getValue());
-				unfilteredItems.remove(constraintItem);
-				changeTracker.addUndo(new DeleteConstraint(constraintItem, index, false));
-				updateConstraintModel();
+				applyConstraintChange(current -> current.removeConstraint(constraint));
 			}
 		} else {
 			ButtonType yesButton = new ButtonType("Yes");
@@ -581,22 +629,29 @@ public class ConstraintsViewController {
 
 			Optional<ButtonType> result = removeAlert.showAndWait();
 		    if(result.isPresent() && result.get() == yesButton) {
-				int index = groupTreeView.getRoot().getChildren().indexOf(constraintItem);
-				groupTreeView.getRoot().getChildren().remove(constraintItem);
-		    	unfilteredItems.remove(constraintItem);
-		    	this.constraints.remove(constraint);
-				changeTracker.addUndo(new DeleteConstraint(constraintItem, index, constraint instanceof Group));
-				updateConstraintModel();
+		    	applyConstraintChange(current -> current.removeConstraint(constraint));
 		    } else if(result.isPresent() && result.get() == buttonKeepConstraints) {
-				List<Constraint> newConstraints = new LinkedList<>();
-				int index = groupTreeView.getRoot().getChildren().indexOf(constraintItem);
-		    	groupTreeView.getRoot().getChildren().remove(constraintItem);
-		    	this.constraints.remove(constraint);
-		    	resolveGroupConstraint(constraint, newConstraints);
-		    	unfilteredItems.remove(constraintItem);
-				changeTracker.addUndo(new DeleteGroupConstraintSet(constraintItem, index, newConstraints));
-				updateConstraintModel();
+		    	List<SimpleConstraint> resolved = resolveGroupConstraint((Group) constraint);
+		    	applyConstraintChange(current -> current.keepGroupConstraints((Group) constraint, resolved));
 		    }
+		}
+	}
+
+	private void applyConstraintChange(Function<TreePermutation, Boolean> mutation) {
+		TreePermutation current = model.getPermutations().get(permutationIndex);
+		if(current == null) {
+			return;
+		}
+
+		TreePermutation before = current.deepClone();
+        mutation.apply(current);
+		TreePermutation after = current.deepClone();
+
+		changeTracker.addUndo(new PermutationSnapshotChange<>(model.getPermutations(), permutationIndex, before, after));
+
+		updateConstraintModel();
+		if(mainController != null) {
+			mainController.redrawVisualization();
 		}
 	}
 
@@ -605,10 +660,10 @@ public class ConstraintsViewController {
 	 */
 	private void initializeTreeView(List<Constraint> groups) {
 		setUpTreeItems(groups);
-		if(selectionListenerInstalled) {
+		if(selectionListenerInitialized) {
 			return;
 		}
-		selectionListenerInstalled = true;
+		selectionListenerInitialized = true;
 		
 		groupTreeView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
 			if(oldValue != null) {
@@ -638,6 +693,7 @@ public class ConstraintsViewController {
 	 */
 	public void showPermutation(int index) {
 		setPermutationIndex(index);
+		infoController.hideInfoPane();
 		updateConstraintModel();
 	}
 
@@ -682,7 +738,7 @@ public class ConstraintsViewController {
 
 		TreePermutation current = permutations.get(permutationIndex);
 		this.constraints = current.getAllConstraints();
-		this.features = model.getFeatures();
+		this.features = current.getFeatures();
 		this.currentBase = current.getRoot();
 
 		initializeTreeView(this.constraints.stream().filter(c -> c instanceof Group).collect(Collectors.toList()));
@@ -845,13 +901,13 @@ public class ConstraintsViewController {
 	/*
 	 * Logic to keep the constraints when removing (a feature from) a group
 	 */
-	private void resolveGroupConstraint(Constraint constraint, List<Constraint> newConstraints) {
-		if(constraint instanceof AlternativeGroup alternative) {
-
-            Set<Feature> processed = new HashSet<>();
+	private List<SimpleConstraint> resolveGroupConstraint(Group group) {
+		List<SimpleConstraint> newConstraints = new LinkedList<>();
+		if(group instanceof AlternativeGroup) {
+			Set<Feature> processed = new HashSet<>();
 			
-			for(Feature f: alternative.getFeatures()) {
-				newConstraints.add(new Implication(f, alternative.getParent()));
+			for(Feature f: group.getFeatures()) {
+				newConstraints.add(new Implication(f, group.getParent()));
 				
 				for(Feature f2: processed) {
 					newConstraints.add(new MutualExclusion(f, f2));
@@ -860,19 +916,12 @@ public class ConstraintsViewController {
 				processed.add(f);
 			}
 		} else {
-			OrRelation orGroup = (OrRelation) constraint;
-			
-			for(Feature f: orGroup.getFeatures()) {
-				newConstraints.add(new Implication(f, orGroup.getParent()));
+			for(Feature f: group.getFeatures()) {
+				newConstraints.add(new Implication(f, group.getParent()));
 			}
 		}
 
-		newConstraints.stream().forEach((c) -> {
-			if(!constraints.contains(c)) {
-				constraints.add(c);
-			}
-		});
-		newConstraints.retainAll(constraints);
+		return newConstraints;
 	}
 	
 	/*
@@ -924,6 +973,14 @@ public class ConstraintsViewController {
 		return features;
 	}
 
+	public List<Feature> getSelectedFeatures() {
+		TreePermutation current = model.getPermutations().get(permutationIndex);
+		if(current != null && current.getFeatures() != null) {
+			return current.getFeatures();
+		}
+		return features;
+	}
+
 	public ComboBox<Feature> getFeatureComboBox() {
 		return featureComboBox;
 	}
@@ -968,6 +1025,10 @@ public class ConstraintsViewController {
 
 	public void setMainController(Controller controller) {
 		this.mainController = controller;
+	}
+
+	public Controller getMainController() {
+		return mainController;
 	}
 
 	public void isGroupView(boolean groupView) {

@@ -90,7 +90,7 @@ public class VarflixAPI {
     public void generateModel() {
         List<TreePermutation> validTrees = analysis.getGroupPermutations().stream()
                         .flatMap(t -> permutationGenerator.generatePermutations(t.getRoot(), t.getFeatures(), t.getAllConstraints()).stream())
-                                .toList();
+                                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         permutationGenerator.dumpPermutationsToFile(validTrees, "debug_permutations.txt");
         List<Constraint> result = new ArrayList<>(validTrees.get(0).getAllConstraints());
         UVLGenerator.createUVLModel(validTrees.get(0).getRoot(), validTrees.get(0).getCtcs(), "output/model.uvl", false);

@@ -103,6 +103,8 @@ public class ConstraintInfoController {
 	    infoScrollPane.setManaged(false);
 	    currentInfoItem = null;
 	    groupFeatureList.setItems(FXCollections.emptyObservableList());
+	    featureComboBox.getItems().clear();
+	    featureComboBox.setValue(null);
 	   
 	}
 
@@ -117,7 +119,7 @@ public class ConstraintInfoController {
 		List<Feature> newSelection = new ArrayList<>();
 		
 		if(constraint instanceof Group group) {
-			for(Feature feature: controller.getFeatures()) {
+			for(Feature feature: controller.getSelectedFeatures()) {
 				 if(!group.getFeatures().contains(feature) && !group.getParent().equals(feature) && !(feature.getName().startsWith("ALT") || feature.getName().startsWith("OR"))) {
 					 newSelection.add(feature);
 
@@ -207,18 +209,9 @@ public class ConstraintInfoController {
 			 
 			 Optional<ButtonType> result = removeAlert.showAndWait();
 		     if(result.isPresent() && result.get() == yesButton) {
-		    	 Group group = ((Group) currentInfoItem.getValue());
-		    	 group.removeFeature(feature);
-		    	 groupFeatureList.getItems().remove(feature);
-				 controller.getChangeTracker().addUndo(new DeleteConstraintChild(feature, (Group) currentInfoItem.getValue()));
-				 currentInfoItem = groupTreeView.getRoot().getChildren().get(currentItemIndex);
-				 featureComboBox.getItems().add(feature);
-				 
-				 if(group.getFeatures().size() < 2) {
-					 groupTreeView.refresh();
-					 controller.deleteConstraintItem(group, currentInfoItem);
-				 }
-		     }
+                 Group group = (Group) currentInfoItem.getValue();
+                 controller.removeFeatureFromSelectedGroup(group, feature);
+             }
 		 }
 	 
 	 }

@@ -77,7 +77,12 @@ public class ChangeTracker<T, U> {
         if (controller instanceof FeatureViewController) {
             ((FeatureViewController) controller).redrawVisualization();
         } else {
-            ((ConstraintsViewController) controller).updateConstraintModel();
+            ConstraintsViewController constraintsController = (ConstraintsViewController) controller;
+            if (constraintsController.getMainController() != null) {
+                constraintsController.getMainController().redrawVisualization();
+            } else {
+                constraintsController.updateConstraintModel();
+            }
         }
     }
 
