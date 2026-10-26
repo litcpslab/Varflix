@@ -150,7 +150,7 @@ public class PermutationGenerator {
 
 
         if (orphanIndex >= orphans.size()) {
-            currentState.setCtcs(computeCTCs(currentState, clonedSimpleConstraints(allSimpleConstraints, currentState.getFeatures())));
+            currentState.setSimpleConstraints(clonedSimpleConstraints(allSimpleConstraints, currentState.getFeatures()));
             currentState.setGroups(cloneGroups(groupConstraints, currentState.getFeatures()));
             results.add(currentState);
             return;
@@ -276,7 +276,7 @@ public class PermutationGenerator {
                 writer.println("MODEL " + (i + 1) + "\n");
 
                 writer.println("UVL:");
-                UVLGenerator.writeUVLModel(perm.getRoot(), perm.getCtcs(), writer);
+                UVLGenerator.writeUVLModel(perm.getRoot(), perm.getModelCtcs(), writer);
 
                 writer.println("\n===========================================\n");
             }

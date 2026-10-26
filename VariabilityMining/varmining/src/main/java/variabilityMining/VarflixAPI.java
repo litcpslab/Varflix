@@ -92,8 +92,8 @@ public class VarflixAPI {
                         .flatMap(t -> permutationGenerator.generatePermutations(t.getRoot(), t.getFeatures(), t.getAllConstraints()).stream())
                                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         permutationGenerator.dumpPermutationsToFile(validTrees, "debug_permutations.txt");
-        List<Constraint> result = new ArrayList<>(validTrees.get(0).getAllConstraints());
-        UVLGenerator.createUVLModel(validTrees.get(0).getRoot(), validTrees.get(0).getCtcs(), "output/model.uvl", false);
+        List<Constraint> result = new ArrayList<>(validTrees.get(0).getModelConstraints());
+        UVLGenerator.createUVLModel(validTrees.get(0).getRoot(), validTrees.get(0).getModelCtcs(), "output/model.uvl", false);
 
         DeltaModelGenerator.generateDeltaConfigFile(validTrees.get(0).getFeatures(), result, "output/deltas/");
 

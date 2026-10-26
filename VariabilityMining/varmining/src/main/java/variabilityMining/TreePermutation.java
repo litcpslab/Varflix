@@ -10,7 +10,7 @@ import java.util.Map;
 public class TreePermutation {
     private Feature root;
     private List<Feature> features;
-    private List<SimpleConstraint> ctcs;
+    private List<SimpleConstraint> simpleConstraints;
     private List<Group> groups;
 
     public TreePermutation(Feature root,  List<Feature> features) {
@@ -20,7 +20,7 @@ public class TreePermutation {
     public TreePermutation(Feature root, List<Feature> features, List<SimpleConstraint> ctcs) {
         this.root = root;
         this.features = features;
-        this.ctcs = ctcs;
+        this.simpleConstraints = ctcs;
         this.groups = new ArrayList<>();
     }
 
@@ -55,7 +55,7 @@ public class TreePermutation {
         List<Feature> clonedFeatures = new ArrayList<>(oldToNewMap.values());
 
         List<SimpleConstraint> clonedCtcs = new ArrayList<>();
-        for (SimpleConstraint ctc : this.ctcs) {
+        for (SimpleConstraint ctc : this.simpleConstraints) {
             Feature clonedF1 = oldToNewMap.get(ctc.getFeature1());
             Feature clonedF2 = oldToNewMap.get(ctc.getFeature2());
 
@@ -135,8 +135,8 @@ public class TreePermutation {
         return null;
     }
 
-    public List<SimpleConstraint> getCtcs() {
-        return ctcs;
+    public List<SimpleConstraint> getSimpleConstraints() {
+        return simpleConstraints;
     }
 
     public List<Group> getGroups() {
@@ -159,8 +159,8 @@ public class TreePermutation {
         this.features = features;
     }
 
-    public void setCtcs(List<SimpleConstraint> ctcs) {
-        this.ctcs = ctcs;
+    public void setSimpleConstraints(List<SimpleConstraint> simpleConstraints) {
+        this.simpleConstraints = simpleConstraints;
     }
 
     public void setGroups(List<Group> groups) {
@@ -168,19 +168,62 @@ public class TreePermutation {
     }
 
     public List<Constraint> getAllConstraints() {
-        List<Constraint> constraints = new ArrayList<>(ctcs);
+        List<Constraint> constraints = new ArrayList<>(simpleConstraints);
+        constraints.addAll(groups);
+        return constraints;
+    }
+
+    public List<SimpleConstraint> getModelCtcs() {
+        return PermutationGenerator.computeCTCs(this, simpleConstraints);
+    }
+
+    public List<Constraint> getModelConstraints() {
+        List<Constraint> constraints = new ArrayList<>(getModelCtcs());
         constraints.addAll(groups);
         return constraints;
     }
 
     public boolean removeConstraint(Constraint constraint) {
         if (constraint instanceof SimpleConstraint sc) {
-            return ctcs.remove(sc);
+            Feature affectedFeature = findFeatureAffectedByConstraint(sc);
+            boolean removed = simpleConstraints.remove(sc);
+            if (removed && affectedFeature != null) {
+                repositionFeature(affectedFeature);
+            }
+            return removed;
         }
         if (constraint instanceof Group g) {
             return removeGroup(g);
         }
         return false;
+    }
+
+    private Feature findFeatureAffectedByConstraint(SimpleConstraint constraint) {
+        if (constraint instanceof Implication
+                && constraint.getFeature1() != null && constraint.getFeature2() != null
+                && !constraint.getFeature1().equals(root)
+                && findGroupContaining(constraint.getFeature1()) == null
+                && constraint.getFeature1().getParent() != null
+                && getFeatureAncestors(constraint.getFeature1()).contains(constraint.getFeature2())) {
+                    return constraint.getFeature1();
+        }
+        return null;
+    }
+
+    private void repositionFeature(Feature feature) {
+        if (feature == null || feature.equals(root) || findGroupContaining(feature) != null) return;
+
+        Feature oldParent = feature.getParent();
+        if (oldParent != null && oldParent.getChildren() != null) {
+            oldParent.getChildren().removeIf(f -> f.equals(feature));
+        }
+        feature.setParent(null);
+
+        placeFeature(feature, new ArrayList<>(), false, root);
+
+        pruneSyntheticFeature();
+        normalizeGroups();
+        pruneSimpleConstraints();
     }
 
     public boolean addSimpleConstraint(SimpleConstraint constraint) {
@@ -203,7 +246,7 @@ public class TreePermutation {
             }
         }
 
-        ctcs.add(constraint);
+        simpleConstraints.add(constraint);
         return true;
     }
 
@@ -297,7 +340,7 @@ public class TreePermutation {
 
         pruneSyntheticFeature();
         normalizeGroups();
-        recomputeCtcs();
+        pruneSimpleConstraints();
         return true;
     }
 
@@ -372,7 +415,7 @@ public class TreePermutation {
         group.getFeatures().add(feature);
         pruneSyntheticFeature();
         normalizeGroups();
-        recomputeCtcs();
+        pruneSimpleConstraints();
         return true;
     }
 
@@ -392,8 +435,8 @@ public class TreePermutation {
         if (dissolved != null) {
             for (SimpleConstraint constraint : dissolved) {
                 if (constraint.getFeature1().equals(constraint.getFeature2())) continue;
-                if (!ctcs.contains(constraint)) {
-                    ctcs.add(constraint);
+                if (!simpleConstraints.contains(constraint)) {
+                    simpleConstraints.add(constraint);
                 }
             }
         }
@@ -425,9 +468,9 @@ public class TreePermutation {
         normalizeGroups();
 
         if (dissolved == null) {
-            recomputeCtcs();
+            pruneSimpleConstraints();
         } else {
-            ctcs.removeIf(c -> !featuresContains(c.getFeature1()) || !featuresContains(c.getFeature2()));
+            simpleConstraints.removeIf(c -> !featuresContains(c.getFeature1()) || !featuresContains(c.getFeature2()));
         }
 
         return true;
@@ -443,8 +486,8 @@ public class TreePermutation {
                     continue;
                 }
                 MutualExclusion mutex = new MutualExclusion(first, second);
-                if (!ctcs.contains(mutex)) {
-                    ctcs.add(mutex);
+                if (!simpleConstraints.contains(mutex)) {
+                    simpleConstraints.add(mutex);
                 }
             }
         }
@@ -552,7 +595,7 @@ public class TreePermutation {
 
         normalizeGroups();
 
-        recomputeCtcs();
+        pruneSimpleConstraints();
 
         return true;
     }
@@ -728,7 +771,7 @@ public class TreePermutation {
 
     private List<Feature> findParentCandidates(Feature feature) {
         List<Feature> candidates = new ArrayList<>();
-        for (SimpleConstraint ctc : ctcs) {
+        for (SimpleConstraint ctc : simpleConstraints) {
             if (ctc instanceof Implication && ctc.getFeature1().equals(feature)) {
                 Feature candidate = ctc.getFeature2();
                 if (candidate != null && !candidates.contains(candidate)) {
@@ -758,7 +801,7 @@ public class TreePermutation {
         List<SimpleConstraint> kept = new ArrayList<>();
         List<SimpleConstraint> additions = new ArrayList<>();
 
-        for (SimpleConstraint ctc : ctcs) {
+        for (SimpleConstraint ctc : simpleConstraints) {
             boolean firstRemoved = ctc.getFeature1().equals(removed);
             boolean secondRemoved = ctc.getFeature2().equals(removed);
 
@@ -797,10 +840,10 @@ public class TreePermutation {
             }
         }
 
-        this.ctcs = kept;
+        this.simpleConstraints = kept;
         for (SimpleConstraint addition : additions) {
-            if (!ctcs.contains(addition)) {
-                ctcs.add(addition);
+            if (!simpleConstraints.contains(addition)) {
+                simpleConstraints.add(addition);
             }
         }
     }
@@ -812,9 +855,18 @@ public class TreePermutation {
         }
     }
 
-    private void recomputeCtcs() {
-        this.ctcs.removeIf(ctc -> !featuresContains(ctc.getFeature1()) || !featuresContains(ctc.getFeature2()));
-        this.ctcs = PermutationGenerator.computeCTCs(this, this.ctcs);
+    private void pruneSimpleConstraints() {
+        this.simpleConstraints.removeIf(ctc -> !featuresContains(ctc.getFeature1()) || !featuresContains(ctc.getFeature2()));
+        for (Group group : groups) {
+            simpleConstraints.removeIf(ctc ->
+                    ctc instanceof Implication && group.getParent() != null
+                            && group.getParent().equals(ctc.getFeature2())
+                            && containsByName(group.getFeatures(), ctc.getFeature1())
+                            || ctc instanceof MutualExclusion && group instanceof AlternativeGroup
+                            && containsByName(group.getFeatures(), ctc.getFeature1())
+                            && containsByName(group.getFeatures(), ctc.getFeature2())
+            );
+        }
     }
 
     private void normalizeGroups() {
@@ -843,7 +895,7 @@ public class TreePermutation {
                         survivor.setParent(grandParent);
                         grandParent.getChildren().replaceAll(f -> f.equals(groupParent) ? survivor : f);
                         group.getFeatures().replaceAll(f -> f.equals(survivor) ? survivor : f);
-                        for (SimpleConstraint ctc : ctcs) {
+                        for (SimpleConstraint ctc : simpleConstraints) {
                             if(ctc.getFeature1().equals(groupParent)) {
                                 ctc.setFeature1(survivor);
                             } else if(ctc.getFeature2().equals(groupParent)) {
@@ -923,7 +975,7 @@ public class TreePermutation {
 
     private boolean hasMutexToAll(Feature feature, List<Feature> members) {
         for (Feature member : members) {
-            boolean mutex = ctcs.stream().anyMatch(ctc -> ctc instanceof MutualExclusion
+            boolean mutex = simpleConstraints.stream().anyMatch(ctc -> ctc instanceof MutualExclusion
                     && ((ctc.getFeature1().equals(feature) && ctc.getFeature2().equals(member))
                     || (ctc.getFeature2().equals(feature) && ctc.getFeature1().equals(member))));
             if (!mutex) return false;
@@ -932,7 +984,7 @@ public class TreePermutation {
     }
 
     private void removeMutexesTo(Feature feature, List<Feature> members) {
-        ctcs.removeIf(ctc -> ctc instanceof MutualExclusion
+        simpleConstraints.removeIf(ctc -> ctc instanceof MutualExclusion
                 && ((ctc.getFeature1().equals(feature) && containsByName(members, ctc.getFeature2()))
                 || (ctc.getFeature2().equals(feature) && containsByName(members, ctc.getFeature1()))));
     }

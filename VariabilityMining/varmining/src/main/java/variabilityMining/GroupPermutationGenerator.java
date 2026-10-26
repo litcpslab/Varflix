@@ -28,7 +28,7 @@ public class GroupPermutationGenerator {
         implicationMap = buildImplicationMap(constraints);
         TreePermutation baseState = new TreePermutation(base, features, constraints.stream().filter(c -> !(c instanceof Group)).map(c -> (SimpleConstraint) c).collect(Collectors.toList()));
         List<TreePermutation> permutations = new ArrayList<>();
-        List<MutualExclusion> availableMutex = new ArrayList<>(filterConstraintType(baseState.getCtcs(), MutualExclusion.class).toList());
+        List<MutualExclusion> availableMutex = new ArrayList<>(filterConstraintType(baseState.getSimpleConstraints(), MutualExclusion.class).toList());
 
         List<AlternativeGroup> initialClusters = getAlternativeGroupClusters(base, baseState.getFeatures(), availableMutex);
         initialClusters = splitClustersByParents(initialClusters);
@@ -85,7 +85,7 @@ public class GroupPermutationGenerator {
         String parentName = targetGroup.getParent() != null ? targetGroup.getParent().getName() : "";
 
         // remove covered simple constraints
-        includeState.getCtcs().removeIf(c -> {
+        includeState.getSimpleConstraints().removeIf(c -> {
             if (c instanceof MutualExclusion) {
                 // remove Mutex if both features are inside this ALT group
                 return altFeatures.stream().anyMatch(f -> f.getName().equals(c.getFeature1().getName()))
@@ -255,7 +255,7 @@ public class GroupPermutationGenerator {
         for (TreePermutation permutation : permutations) {
             List<Constraint> constraints = permutation.getAllConstraints();
             findOrGroups(constraints, permutation.getFeatures());
-            permutation.setCtcs(filterConstraintType(constraints, SimpleConstraint.class).toList());
+            permutation.setSimpleConstraints(filterConstraintType(constraints, SimpleConstraint.class).toList());
             permutation.setGroups(filterConstraintType(constraints, Group.class).toList());
         }
     }
@@ -324,7 +324,7 @@ public class GroupPermutationGenerator {
         for(TreePermutation permutation: permutations) {
             List<Constraint> constraints = permutation.getAllConstraints();
             filterRedundantConstraints(constraints);
-            permutation.setCtcs(filterConstraintType(constraints, SimpleConstraint.class).toList());
+            permutation.setSimpleConstraints(filterConstraintType(constraints, SimpleConstraint.class).toList());
             permutation.setGroups(filterConstraintType(constraints, Group.class).toList());
         }
     }
