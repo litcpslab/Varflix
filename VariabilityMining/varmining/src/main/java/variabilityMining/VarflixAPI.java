@@ -80,23 +80,21 @@ public class VarflixAPI {
     public List<TreePermutation> getPermutations() {
         return permutations;
     }
-	
-//	public List<Constraint> generateModel(Feature base, List<Feature> features, List<Constraint> constraints) {
-//		List<Constraint> updatedConstraints = generator.generateVariabilityModel(base, features, constraints);
-//		DeltaModelGenerator.generateDeltaConfigFile(features, constraints, "output/deltas/");
-//        return updatedConstraints;
-//	}
 
-    public void generateModel() {
+    public void generatePermutations() {
         List<TreePermutation> validTrees = analysis.getGroupPermutations().stream()
                         .flatMap(t -> permutationGenerator.generatePermutations(t.getRoot(), t.getFeatures(), t.getAllConstraints()).stream())
                                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         permutationGenerator.dumpPermutationsToFile(validTrees, "debug_permutations.txt");
-        List<Constraint> result = new ArrayList<>(validTrees.get(0).getModelConstraints());
-        UVLGenerator.createUVLModel(validTrees.get(0).getRoot(), validTrees.get(0).getModelCtcs(), "output/model.uvl", false);
-
-        DeltaModelGenerator.generateDeltaConfigFile(validTrees.get(0).getFeatures(), result, "output/deltas/");
-
         permutations = validTrees;
+    }
+
+    public void generateModel(int permutationIndex) {
+
+        TreePermutation selected = permutations.get(permutationIndex);
+        List<Constraint> result = new ArrayList<>(selected.getModelConstraints());
+
+        UVLGenerator.createUVLModel(selected.getRoot(), selected.getModelCtcs(), "output/model.uvl", false);
+        DeltaModelGenerator.generateDeltaConfigFile(selected.getFeatures(), result, "output/deltas/");
     }
 }

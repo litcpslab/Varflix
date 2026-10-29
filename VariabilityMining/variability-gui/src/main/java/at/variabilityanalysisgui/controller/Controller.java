@@ -79,8 +79,7 @@ public class Controller {
         originalGroups = model.computeInitialGroups();
         model.computePCM(originalGroups);
         model.performFCA();
-        model.generateModel();
-        Feature currentBase = model.getPermutations().get(0).getRoot();
+        model.generatePermutations();
 
         artifactType = ExtractionType.IEC61499;		//TODO Change dynamically based on artifacts used
         featureViewController.setMainController(this);

@@ -422,9 +422,8 @@ public class ConstraintsViewController {
 	 */
 	@FXML
 	public void handleGenerateAction() {
-		List<Constraint> constraintsList = new ArrayList<>();
-		constraintsList.addAll(constraints);
-		//TODO
+        int selectedIndex = permutationIndex;
+        model.generateModel(selectedIndex);
 		Alert confirmationAlert = new Alert(AlertType.CONFIRMATION, "The model was successfully generated in the file model.uvl!", ButtonType.FINISH);
 		confirmationAlert.setHeaderText("Generation Confirmation");
 		 
