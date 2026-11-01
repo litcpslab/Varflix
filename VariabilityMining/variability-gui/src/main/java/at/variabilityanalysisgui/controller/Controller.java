@@ -76,7 +76,7 @@ public class Controller {
     }
 
     public void init(String variantPath, String extractionPath) {
-        originalGroups = model.computeInitialGroups();
+        originalGroups = model.computeInitialGroups(variantPath, extractionPath);
         model.computePCM(originalGroups);
         model.performFCA();
         model.generatePermutations();
@@ -109,8 +109,6 @@ public class Controller {
                 saveItem.setOnAction(e -> handleSaveAction());
             }
         });
-
-        Feature currentBase = computeFeatureModel();
 
         Platform.runLater(this::updateVisualizationTabs);
 

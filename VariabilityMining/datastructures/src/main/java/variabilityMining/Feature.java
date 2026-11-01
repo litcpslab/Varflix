@@ -91,7 +91,7 @@ public class Feature implements Comparable<Feature> {
 		return isAbstract;
 	}
 
-    public boolean isOptional(){
+    public boolean isOptional() {
         return !mandatory && getParent() != null && !getParent().isAlternativeParent() && !getParent().isOrParent();
     }
 	public void setChildren(List<Feature> children) {

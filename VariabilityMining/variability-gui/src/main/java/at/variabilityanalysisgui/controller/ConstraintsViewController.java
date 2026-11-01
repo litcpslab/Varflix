@@ -125,7 +125,7 @@ public class ConstraintsViewController {
     private List<Feature> features;
     private Feature currentBase;
     private int permutationIndex = 0;
-    private boolean selectionListenerInstalled = false;
+    private boolean selectionListenerInitialized = false;
     private final LlmService llmService = new LlmService("IEC61499");
 
     //private Controller mainController;
