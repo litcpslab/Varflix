@@ -394,9 +394,9 @@ public class TreeViewController {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Confirm Deletion");
         alert.setHeaderText("Remove '" + item.getValue().getDisplayName() + "'?");
-        ButtonType yesButton = new ButtonType("Yes");
+        ButtonType yesButton = new ButtonType("Remove Feature");
         ButtonType onlyDirectoryButton = new ButtonType("Keep Subelements");
-        ButtonType noButton = new ButtonType("No");
+        ButtonType noButton = new ButtonType("Cancel");
         if (item.getValue().isDirectory() && item.getValue().getType() == FeatureTreeNode.DataType.ELEMENT) {
             alert.setContentText("Do you want to remove this item and all its subelements?");
             alert.getButtonTypes().setAll(yesButton, onlyDirectoryButton, noButton);
@@ -492,9 +492,9 @@ public class TreeViewController {
                 alert.setTitle("Move Directory");
                 alert.setHeaderText("Move Directory and all its subelements?");
                 alert.setContentText("Do you want to move the directory and all its subelements to the new group?");
-                ButtonType yesButton = new ButtonType("Yes");
+                ButtonType yesButton = new ButtonType("Move Directory");
                 ButtonType onlyDirectoryButton = new ButtonType("Keep Subelements");
-                ButtonType noButton = new ButtonType("No");
+                ButtonType noButton = new ButtonType("Cancel");
                 alert.getButtonTypes().setAll(yesButton, onlyDirectoryButton, noButton);
                 Optional<ButtonType> result = alert.showAndWait();
                 if(result.isPresent() && result.get() == noButton) {

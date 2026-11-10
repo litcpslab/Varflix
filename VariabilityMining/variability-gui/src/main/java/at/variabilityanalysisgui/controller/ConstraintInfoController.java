@@ -200,8 +200,8 @@ public class ConstraintInfoController {
 			 errorAlert.setHeaderText("Removal Error");
 			 errorAlert.show();
 		 } else {
-			 ButtonType yesButton = new ButtonType("Yes");
-			 ButtonType noButton = new ButtonType("No");
+			 ButtonType yesButton = new ButtonType("Remove Feature");
+			 ButtonType noButton = new ButtonType("Cancel");
 			 Alert removeAlert = new Alert(AlertType.CONFIRMATION, "Should the feature " + feature.getName() + " be removed from the group?", yesButton, noButton);
 			 removeAlert.setHeaderText("Removal Confirmation");
 			 

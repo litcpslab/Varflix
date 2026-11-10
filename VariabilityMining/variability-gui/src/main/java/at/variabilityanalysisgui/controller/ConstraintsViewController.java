@@ -248,9 +248,9 @@ public class ConstraintsViewController {
 			
 			for(Group g: groups) {
 				if(g != group && g.getFeatures().contains(addFeature)) {
-					ButtonType yesButton = new ButtonType("Yes");
-					ButtonType noButton = new ButtonType("No");
-					ButtonType buttonKeepConstraints = new ButtonType("Keep Constraints");
+					ButtonType yesButton = new ButtonType("Add Feature");
+					ButtonType noButton = new ButtonType("Cancel");
+					ButtonType buttonKeepConstraints = new ButtonType("Add & Keep Constraints");
 					Alert warningAlert = new Alert(AlertType.WARNING, "The feature you are trying to add is already part of another group. Should it be moved here? (It will be removed from its current group)", yesButton, buttonKeepConstraints, noButton);
 					warningAlert.setHeaderText("Addition Warning");
 					
@@ -443,6 +443,7 @@ public class ConstraintsViewController {
 
                     if (constraint != null) {
 						if (!constraintIsPresent(constraint)) {
+							constraints.add(constraint);
 							TreeItem<Constraint> addItem = addSimpleConstraintTreeItem(constraint);
 							changeTracker.addUndo(new AddSimpleConstraint(addItem, groupTreeView.getRoot().getChildren().indexOf(addItem)));
 						}
@@ -486,12 +487,12 @@ public class ConstraintsViewController {
 			if(c instanceof SimpleConstraint compareConstraint){
                 if((compareConstraint.getFeature1().equals(constraint.getFeature1()) && compareConstraint.getFeature2().equals(constraint.getFeature2())) ||
 						(compareConstraint.getFeature1().equals(constraint.getFeature2()) && compareConstraint.getFeature2().equals(constraint.getFeature1()))){
-                    return !compareConstraint.getType().equals("Implication") || !constraint.getType().equals("Equivalence");
+                    return !(compareConstraint.getType().equals("Implication") && constraint.getType().equals("Equivalence"));
 				}
 			}
 		}
 
-		return true;
+		return false;
 	}
 
 	public TreeItem<Constraint> addSimpleConstraintTreeItem(Constraint constraint) {
@@ -536,8 +537,8 @@ public class ConstraintsViewController {
 	
 	public void deleteConstraintItem(Constraint constraint, TreeItem<Constraint> constraintItem) {
 		if(constraint instanceof SimpleConstraint) {
-			ButtonType yesButton = new ButtonType("Yes");
-			ButtonType noButton = new ButtonType("No");
+			ButtonType yesButton = new ButtonType("Remove Constraint");
+			ButtonType noButton = new ButtonType("Cancel");
 			Alert removeAlert = new Alert(AlertType.CONFIRMATION, "Should the constraint " + constraintItem.getValue() + " be removed?", yesButton, noButton);
 			removeAlert.setHeaderText("Removal Confirmation");
 
@@ -551,13 +552,13 @@ public class ConstraintsViewController {
 				updateConstraintModel();
 			}
 		} else {
-			ButtonType yesButton = new ButtonType("Yes");
-			ButtonType noButton = new ButtonType("No");
+			ButtonType yesButton = new ButtonType("Remove Group Constraint");
+			ButtonType noButton = new ButtonType("Cancel");
 			Alert removeAlert = new Alert(AlertType.CONFIRMATION, "Should the constraint " + constraint + " be removed?", yesButton, noButton);
 			removeAlert.setHeaderText("Removal Confirmation");
 			
-			ButtonType buttonKeepConstraints = new ButtonType("Keep constraints");
-			
+			ButtonType buttonKeepConstraints = new ButtonType("Remove Group & Keep constraints");
+
 			if(constraint instanceof Group) {
 				removeAlert.getButtonTypes().add(buttonKeepConstraints);
 			}

@@ -63,22 +63,28 @@ public class FeatureTreeCell extends TreeCell<FeatureTreeNode> {
     @Override
     protected void updateItem(FeatureTreeNode item, boolean empty) {
         super.updateItem(item, empty);
-        if (empty || item == null) {
+        if(empty || item == null) {
             setText(null);
             setGraphic(null);
+            setStyle("");
         } else {
             nameLabel.setText(item.getDisplayName());
-            if (item.getType() == FeatureTreeNode.DataType.ELEMENT) {
+            if(this.isSelected()){
+                setStyle("-fx-background-color: #7ec8ff;");
+            } else if(item.getType() == FeatureTreeNode.DataType.ELEMENT) {
                 typeLabel.setText("E");
                 typeLabel.setStyle("-fx-text-fill: #00AA00;");
+                setStyle("-fx-background-color: lightgrey;");
                 deleteButton.setVisible(true);
-            } else if (item.getType() == FeatureTreeNode.DataType.CONTAINER) {
+            } else if(item.getType() == FeatureTreeNode.DataType.CONTAINER) {
                 typeLabel.setText("D");
                 typeLabel.setStyle("-fx-text-fill: #0000FF;");
+                setStyle("-fx-background-color: white;");
                 deleteButton.setVisible(false);
-            } else if (item.getType() == FeatureTreeNode.DataType.GROUP) {
+            } else if(item.getType() == FeatureTreeNode.DataType.GROUP) {
                 typeLabel.setText("F");
                 typeLabel.setStyle("-fx-text-fill: #A0A0A0;");
+                setStyle("-fx-background-color: white;");
                 deleteButton.setVisible(true);
             }
             hbox.getChildren().setAll(nameLabel, typeLabel);

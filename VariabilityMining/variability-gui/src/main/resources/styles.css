@@ -4,4 +4,9 @@
 
 .tree-cell {
     -fx-font-size: 24px;
+    -fx-background-color: white;
+}
+
+.tree-cell:selected {
+    -fx-background-color: #7ec8ff;
 }
