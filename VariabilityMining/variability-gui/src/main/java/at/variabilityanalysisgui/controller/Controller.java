@@ -76,20 +76,22 @@ public class Controller {
         featureViewController.init();
         constraintsViewController.init();
         constraintsViewController.setMainController(this);
-        
+
         constraintsTab.setOnSelectionChanged(event -> {
-        	if(constraintsTab.isSelected()) {
-        		constraintsViewController.setModel(model);
-        		featureViewController.resetSelection();
-        		constraintsViewController.isGroupView(true);
-                loadItem.setOnAction(e -> constraintsViewController.handleLoadAction());
-                saveItem.setOnAction(e -> constraintsViewController.handleSaveAction());
-        	} else {
-        		constraintsViewController.resetConstraintsViewButtons();
-        		constraintsViewController.resetSelection();
-                loadItem.setOnAction(e -> handleLoadAction());
-                saveItem.setOnAction(e -> handleSaveAction());
-        	}
+            if(constraintsTab.isSelected()) {
+                constraintsViewController.setModel(model);
+                featureViewController.resetSelection();
+                constraintsViewController.isGroupView(true);
+                if (featureGraph != null) {
+                    featureGraph.setInteractionMode(TreeGraph.InteractionMode.GROUP_CONSTRAINTS);
+                }
+            } else {
+                constraintsViewController.resetConstraintsViewButtons();
+                constraintsViewController.resetSelection();
+                if (featureGraph != null) {
+                    featureGraph.setInteractionMode(TreeGraph.InteractionMode.FEATURE_LIST);
+                }
+            }
         });
 
         computeFeatureModel();
@@ -97,13 +99,14 @@ public class Controller {
         Platform.runLater(()->{
         	featureGraph = new TreeGraph(currentBase);
 
-            visualizationWindow.setContent((Node)featureGraph.getViewer());
+            //visualizationWindow.setContent((Node)featureGraph.getViewer());
+            visualizationWindow.setContent(featureGraph.getViewWithHint());
             visualizationWindow.setFitToWidth(true);
             visualizationWindow.setFitToHeight(true);
 
             TreeViewController treeViewController = featureViewController.getTreeViewController();
-            featureGraph.setSelectionListener(treeViewController::selectAndScrollTo);
             treeViewController.setOnListSelectionChanged(featureId -> featureGraph.highlightNode(featureId));
+            featureGraph.addFeatureSelectionListener(featureId -> treeViewController.selectAndScrollTo(featureId));
         });
         
     }

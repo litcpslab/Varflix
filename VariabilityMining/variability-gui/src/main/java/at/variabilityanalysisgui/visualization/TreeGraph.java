@@ -15,6 +15,7 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
+import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
@@ -23,12 +24,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Polygon;
+import javafx.scene.shape.Rectangle;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.MultiGraph;
 import org.graphstream.ui.fx_viewer.FxDefaultView;
 import org.graphstream.ui.fx_viewer.FxViewer;
-import org.graphstream.ui.fx_viewer.util.FxMouseManager;
 import org.graphstream.ui.javafx.FxGraphRenderer;
 import org.graphstream.ui.spriteManager.Sprite;
 import org.graphstream.ui.spriteManager.SpriteManager;
@@ -36,11 +37,8 @@ import org.graphstream.ui.view.View;
 import org.graphstream.ui.view.Viewer;
 import org.graphstream.ui.view.ViewerListener;
 import org.graphstream.ui.view.ViewerPipe;
-import org.graphstream.ui.view.util.InteractiveElement;
 import variabilityMining.Feature;
-
-import java.util.EnumSet;
-import java.util.List;
+import java.util.*;
 
 public class TreeGraph implements ViewerListener {
 
@@ -68,13 +66,59 @@ public class TreeGraph implements ViewerListener {
         void onFeatureSelected(String featureId);
     }
 
-    private FeatureSelectionListener selectionListener;
+    public interface GroupSelectionListener {
+        void onGroupSelected(String parentFeatureId);
+    }
+
+    private final List<FeatureSelectionListener> featureSelectionListeners = new ArrayList<>();
+    private final List<GroupSelectionListener> groupSelectionListeners = new ArrayList<>();
+
     private double pressX, pressY;
     private static final double CLICK_THRESHOLD_PX = 5.0;
+    private static final double SPRITE_CLICK_RADIUS_PX = 20.0;
 
-    public void setSelectionListener(FeatureSelectionListener listener) {
-        this.selectionListener = listener;
+    private String draggedSpriteId = null;
+
+    //map group id to all its member features
+    private final Map<String, Set<String>> groupChildren = new HashMap<>();
+    //map any features to its immediate parent
+    private final Map<String, String> nodeParent = new HashMap<>();
+    // spriteId mapped to parent feature id
+    private final Map<String, String> groupSpriteParent = new HashMap<>();
+    private Label hintLabel;
+    private VBox hintBox;
+    private Button hintToggle;
+    private boolean hintExpanded = false;
+
+    private String hintText() {
+        return switch (mode) {
+            case FEATURE_LIST ->
+                    "Click a feature to scroll to it in the list.\nSelect a feature in the list to highlight it here.";
+            case GROUP_CONSTRAINTS ->
+                    "Click an OR/XOR triangle to select its group in the list.\nSelect a group in the list to highlight it here.";
+            case SIMPLE_CONSTRAINTS ->
+                    "Select a constraint in the list to highlight its two features here.";
+        };
     }
+
+    private void updateHint() {
+        if (hintLabel != null) {
+            hintLabel.setText(hintText());
+        }
+    }
+
+    public void addFeatureSelectionListener(FeatureSelectionListener listener) {
+        featureSelectionListeners.add(listener);
+    }
+
+    public void addGroupSelectionListener(GroupSelectionListener listener) {
+        groupSelectionListeners.add(listener);
+    }
+
+    public Set<String> getGroupChildFeatureNames(String groupId) {
+        return groupChildren.getOrDefault(groupId, Collections.emptySet());
+    }
+
 
     public View getViewer() {
         setupGraph();
@@ -84,7 +128,6 @@ public class TreeGraph implements ViewerListener {
 
         FxViewer viewer = new FxViewer(graph, Viewer.ThreadingModel.GRAPH_IN_GUI_THREAD);
         view = (FxDefaultView) viewer.addView("view", new FxGraphRenderer());
-        view.setMouseManager(new FxMouseManager(EnumSet.of(InteractiveElement.NODE)));
 
         viewer.disableAutoLayout();
 
@@ -121,6 +164,7 @@ public class TreeGraph implements ViewerListener {
             //  MOUSE PRESS: Detect and pick target node
             view.setOnMousePressed(event -> {
                 double clickRadiusPx = 25.0;
+                boolean nodeHit = false;
 
                 for (Node n : graph) {
                     if (!n.hasAttribute("xyz")) continue;
@@ -128,7 +172,6 @@ public class TreeGraph implements ViewerListener {
                     double nx = toDouble(xyz[0]);
                     double ny = toDouble(xyz[1]);
 
-                    //convert the nodes position from graph unit into pixel coordinates so the node and mouse click are comparable
                     org.graphstream.ui.geom.Point3 nodePx =
                             view.getCamera().transformGuToPx(nx, ny, 0);
 
@@ -140,7 +183,6 @@ public class TreeGraph implements ViewerListener {
                         pressX = event.getX();
                         pressY = event.getY();
 
-                        // retrieve original  position
                         if (n.hasAttribute("origX") && n.hasAttribute("origY")) {
                             initialNodeX = toDouble(n.getAttribute("origX"));
                             initialNodeY = toDouble(n.getAttribute("origY"));
@@ -148,7 +190,34 @@ public class TreeGraph implements ViewerListener {
                             initialNodeX = nx;
                             initialNodeY = ny;
                         }
+                        nodeHit = true;
                         break;
+                    }
+                }
+
+                if (!nodeHit) {
+                    for (Map.Entry<String, String> entry : groupSpriteParent.entrySet()) {
+                        String spriteId = entry.getKey();
+                        String parentId = entry.getValue();
+                        Node parentNode = graph.getNode(parentId);
+                        if (parentNode == null || !parentNode.hasAttribute("xyz")) continue;
+
+                        Object[] xyz = (Object[]) parentNode.getAttribute("xyz");
+                        double nx = toDouble(xyz[0]);
+                        double ny = toDouble(xyz[1]) - 20; // matches triangleSprite's setPosition(0, -20, 0) offset
+
+                        org.graphstream.ui.geom.Point3 spritePx =
+                                view.getCamera().transformGuToPx(nx, ny, 0);
+
+                        double dx = spritePx.x - event.getX();
+                        double dy = spritePx.y - event.getY();
+
+                        if (Math.sqrt(dx * dx + dy * dy) < SPRITE_CLICK_RADIUS_PX) {
+                            draggedSpriteId = spriteId;
+                            pressX = event.getX();
+                            pressY = event.getY();
+                            break;
+                        }
                     }
                 }
             });
@@ -187,15 +256,32 @@ public class TreeGraph implements ViewerListener {
                 if (draggedNodeId != null) {
                     double dx = event.getX() - pressX;
                     double dy = event.getY() - pressY;
-                    if (Math.sqrt(dx * dx + dy * dy) < CLICK_THRESHOLD_PX) {
+                    boolean isClick = Math.sqrt(dx * dx + dy * dy) < CLICK_THRESHOLD_PX;
+
+                    if (isClick && mode == InteractionMode.FEATURE_LIST) {
                         String clickedId = draggedNodeId;
                         highlightNode(clickedId);
-                        if (selectionListener != null) {
-                            selectionListener.onFeatureSelected(clickedId);
+                        for (FeatureSelectionListener l : featureSelectionListeners) {
+                            l.onFeatureSelected(clickedId);
+                        }
+                    }
+                } else if (draggedSpriteId != null) {
+                    double dx = event.getX() - pressX;
+                    double dy = event.getY() - pressY;
+                    boolean isClick = Math.sqrt(dx * dx + dy * dy) < CLICK_THRESHOLD_PX;
+
+                    if (isClick && mode == InteractionMode.GROUP_CONSTRAINTS) {
+                        String groupId = groupSpriteParent.get(draggedSpriteId);
+                        if (groupId != null) {
+                            highlightNodes(computeGroupHighlightSet(groupId));
+                            for (GroupSelectionListener l : groupSelectionListeners) {
+                                l.onGroupSelected(groupId);
+                            }
                         }
                     }
                 }
                 draggedNodeId = null;
+                draggedSpriteId = null;
             });
 
             // MOUSE MOVED: Tooltip hover detection
@@ -240,7 +326,7 @@ public class TreeGraph implements ViewerListener {
 
 
             VBox legend = createLegend();
-            legend.setLayoutX(300);
+            legend.setLayoutX(15);
             legend.setLayoutY(15);
 
             view.widthProperty().addListener((obs, oldVal, newVal) -> {
@@ -252,20 +338,40 @@ public class TreeGraph implements ViewerListener {
 
         return view;
     }
-    private String currentlyHighlighted = null;
+    private Set<String> currentlyHighlighted = new HashSet<>();
 
-    public void highlightNode(String featureId) {
+    public void highlightNodes(Collection<String> featureIds) {
         Platform.runLater(() -> {
-            if (currentlyHighlighted != null) {
-                Node prev = graph.getNode(currentlyHighlighted);
-                if (prev != null) prev.removeAttribute("ui.class");
+            for (String id : currentlyHighlighted) {
+                Node prev = graph.getNode(id);
+                if (prev == null) continue;
+                if (prev.hasAttribute("isAbstract")) {
+                    prev.setAttribute("ui.class", "abstract");
+                } else {
+                    prev.removeAttribute("ui.class");
+                }
             }
-            Node n = graph.getNode(featureId);
-            if (n != null) {
-                n.setAttribute("ui.class", "highlighted");
-                currentlyHighlighted = featureId;
+            currentlyHighlighted = new HashSet<>(featureIds);
+            for (String id : currentlyHighlighted) {
+                Node n = graph.getNode(id);
+                if (n != null) n.setAttribute("ui.class", "highlighted");
             }
         });
+    }
+
+    public void highlightNode(String featureId) {
+        highlightNodes(featureId == null ? Set.of() : Set.of(featureId));
+    }
+
+    public javafx.scene.layout.BorderPane getViewWithHint() {
+        View graphView = getViewer();          // the existing method, called once
+        hintBox = createHintBar();
+
+        javafx.scene.layout.BorderPane pane = new javafx.scene.layout.BorderPane();
+        pane.setCenter((javafx.scene.Node) graphView);
+        pane.setBottom(hintBox);
+        javafx.scene.layout.BorderPane.setMargin(hintBox, new Insets(6, 10, 10, 10));
+        return pane;
     }
 
     private VBox createLegend() {
@@ -305,13 +411,19 @@ public class TreeGraph implements ViewerListener {
         xorIcon.setStrokeWidth(1.5);
         HBox xorRow = createLegendRow(xorIcon, "XOR Group");
 
-        legend.getChildren().addAll(title, mandatoryRow, optionalRow, orRow, xorRow);
+        HBox featureRow = createLegendRow(colorBox("#bc99fe", "#333333"), "Feature");
+        HBox abstractRow = createLegendRow(colorBox("#dccbff", "#333333"), "Abstract Feature");
+        HBox highlightRow = createLegendRow(colorBox("#7ec8ff", "#005ea6"), "Selected Feature");
+
+        legend.getChildren().addAll(title, featureRow, abstractRow, highlightRow,
+                mandatoryRow, optionalRow, orRow, xorRow);
+
         return legend;
     }
 
     private HBox createLegendRow(javafx.scene.Node icon, String text) {
         HBox row = new HBox(10);
-        row.setAlignment(Pos.CENTER_LEFT);
+        //row.setAlignment(Pos.CENTER_LEFT);
 
         StackPane iconBox = new StackPane(icon);
         iconBox.setPrefSize(16, 16);
@@ -324,12 +436,43 @@ public class TreeGraph implements ViewerListener {
         row.getChildren().addAll(iconBox, label);
         return row;
     }
+    private VBox createHintBar() {
+        hintToggle = new Button("+  How it works");
+        hintToggle.setStyle("-fx-font-size: 11px; -fx-background-color: transparent; "
+                + "-fx-text-fill: #222222; -fx-font-weight: bold; -fx-cursor: hand;");
+
+        hintLabel = new Label(hintText());
+        hintLabel.setWrapText(true);
+        hintLabel.setMaxWidth(Double.MAX_VALUE);
+        hintLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #222222;");
+        hintLabel.setVisible(false);
+        hintLabel.setManaged(false);   // takes no space while collapsed
+
+        hintToggle.setOnAction(e -> {
+            hintExpanded = !hintExpanded;
+            hintLabel.setVisible(hintExpanded);
+            hintLabel.setManaged(hintExpanded);
+            hintToggle.setText(hintExpanded ? "−  How it works" : "+  How it works");
+        });
+
+        VBox box = new VBox(2, hintToggle, hintLabel);
+        box.setPadding(new Insets(4, 12, 6, 12));
+        box.setMaxWidth(Double.MAX_VALUE);
+        box.setStyle(
+                "-fx-background-color: rgba(255, 255, 255, 0.96);" +
+                        "-fx-border-color: #b0b0b0;" +
+                        "-fx-border-radius: 6px;" +
+                        "-fx-background-radius: 6px;" +
+                        "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 6, 0, 0, 2);");
+        return box;
+    }
     
     public void updateGraph(Feature root) {
-    	/*Node rootNode = graph.getNode(root.getName());
-    	graph.removeNode(rootNode);*/
     	this.root = root;
     	graph.clear();
+        groupChildren.clear();
+        nodeParent.clear();
+        groupSpriteParent.clear();
     	sman = new SpriteManager(graph);
         graph.setAttribute("ui.stylesheet", styleSheet());
         graph.setAttribute("ui.quality");
@@ -353,11 +496,12 @@ public class TreeGraph implements ViewerListener {
 
     private void buildModelRecursive(Feature current) {
         if (current == null) return;
-        addNode(current.getName());
+        addNode(current);
         List<Feature> children = current.getChildren();
         if (children != null) {
             for (Feature child : children) {
-                addNode(child.getName());
+                addNode(child);
+                nodeParent.put(child.getName(), current.getName());
                 String eId = edgeId(current.getName(), child.getName());
                 graph.addEdge(eId, current.getName(), child.getName());
                 buildModelRecursive(child);
@@ -385,13 +529,16 @@ public class TreeGraph implements ViewerListener {
         }
     }
 
-    private void addNode(String id) {
+    private void addNode(Feature feature) {
+        String id = feature.getName();
         if (graph.getNode(id) == null) {
             Node n = graph.addNode(id);
-            String display = id.length() > MAX_LABEL_LEN
-                    ? id.substring(0, MAX_LABEL_LEN) + "."
-                    : id;
+            String display = id.length() > MAX_LABEL_LEN ? id.substring(0, MAX_LABEL_LEN) + "." : id;
             n.setAttribute("ui.label", display);
+            if (feature.isAbstract()) {
+                n.setAttribute("isAbstract", true);
+                n.setAttribute("ui.class", "abstract");
+            }
         }
     }
 
@@ -423,12 +570,26 @@ public class TreeGraph implements ViewerListener {
 
     private void addOr(String parentId, List<Feature> children) {
         double width = calculateGroupWidth(children);
-        triangleSprite("or_" + parentId, "black", width).attachToNode(parentId);
+        String spriteId = "or_" + parentId;
+        triangleSprite(spriteId, "black", width).attachToNode(parentId);
+        groupSpriteParent.put(spriteId, parentId);
+        storeGroupChildren(parentId, children);
     }
 
     private void addXor(String parentId, List<Feature> children) {
         double width = calculateGroupWidth(children);
-        triangleSprite("xor_" + parentId, "white", width).attachToNode(parentId);
+        String spriteId = "xor_" + parentId;
+        triangleSprite(spriteId, "white", width).attachToNode(parentId);
+        groupSpriteParent.put(spriteId, parentId);
+        storeGroupChildren(parentId, children);
+    }
+
+    private void storeGroupChildren(String groupId, List<Feature> children) {
+        Set<String> names = new HashSet<>();
+        for (Feature c : children) {
+            names.add(c.getName());
+        }
+        groupChildren.put(groupId, names);
     }
 
     private double calculateGroupWidth(List<Feature> children) {
@@ -484,15 +645,18 @@ public class TreeGraph implements ViewerListener {
             text-offset: 2px, 3px;
             z-index: 3;
         }
-        node.highlighted {
-            fill-color: #7ec8ff;
-            stroke-color: #005ea6;
-            stroke-width: 1px;
-            }
         edge {
             size: 1.5px;
             fill-color: #555;
             z-index: 1;
+        }
+        node.abstract {
+        fill-color: #dccbff;
+        }
+        node.highlighted {
+            fill-color: #7ec8ff;
+            stroke-color: #005ea6;
+            stroke-width: 1px;
         }
         """;
     }
@@ -514,7 +678,50 @@ public class TreeGraph implements ViewerListener {
         }
     }
 
+    private boolean isAbstractFeature(String name) {
+        Node n = graph.getNode(name);
+        return n != null && n.hasAttribute("isAbstract");
+    }
+
+    public String findGroupIdByChildren(Set<String> featureNames) {
+        for (Map.Entry<String, Set<String>> entry : groupChildren.entrySet()) {
+            if (entry.getValue().equals(featureNames)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    public Set<String> computeGroupHighlightSet(String groupId) {
+        Set<String> ids = new HashSet<>(groupChildren.getOrDefault(groupId, Collections.emptySet()));
+        ids.add(groupId);
+        if (isAbstractFeature(groupId)) {
+            String ancestor = nodeParent.get(groupId);
+            if (ancestor != null) {
+                ids.add(ancestor);
+            }
+        }
+        return ids;
+    }
+
     @Override public void buttonReleased(String s) {}
     @Override public void mouseOver(String id) {}
     @Override public void mouseLeft(String id) {}
+
+    public enum InteractionMode { FEATURE_LIST, GROUP_CONSTRAINTS, SIMPLE_CONSTRAINTS }
+
+    private InteractionMode mode = InteractionMode.FEATURE_LIST;
+
+    public void setInteractionMode(InteractionMode newMode) {
+        this.mode = newMode;
+        highlightNodes(Set.of());   // clear leftover highlights from the previous view
+        updateHint();
+    }
+
+    private Rectangle colorBox(String fill, String stroke) {
+        Rectangle r = new Rectangle(14, 10);
+        r.setFill(Color.web(fill));
+        r.setStroke(Color.web(stroke));
+        return r;
+    }
 }

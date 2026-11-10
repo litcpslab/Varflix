@@ -117,6 +117,7 @@ public class ConstraintsViewController {
     
     //private Controller mainController;
     private boolean isGroupView = true;
+    private boolean isSelectingFromGraph = false;
 
 	private ChangeTracker<ConstraintsViewController, ConstraintInfoController> changeTracker;
 
@@ -350,7 +351,9 @@ public class ConstraintsViewController {
 		});
 		
 		isGroupView = false;
-		
+
+        featureGraph.setInteractionMode(TreeGraph.InteractionMode.SIMPLE_CONSTRAINTS);
+
 		typeCheckComboBox.getItems().clear();
 		typeCheckComboBox.getItems().addAll("Mutual Exclusion", "Implication", "Equivalence");
 	}
@@ -524,6 +527,8 @@ public class ConstraintsViewController {
 		infoController.hideInfoPane();
 		
 		isGroupView = true;
+
+        featureGraph.setInteractionMode(TreeGraph.InteractionMode.GROUP_CONSTRAINTS);
 		
 		typeCheckComboBox.getItems().clear();
 		typeCheckComboBox.getItems().addAll("Or Group", "Alternative");
@@ -591,6 +596,29 @@ public class ConstraintsViewController {
             if(newValue != null && newValue.getValue() != null) {
                 Constraint constraint = newValue.getValue();
                 showInfoPane(constraint, newValue);
+
+                if (!isSelectingFromGraph) {
+                    if (constraint instanceof Group) {
+                        Group group = (Group) constraint;
+                        Set<String> featureNames = group.getFeatures().stream()
+                                .map(Feature::getName)
+                                .collect(Collectors.toSet());
+                        String groupId = featureGraph.findGroupIdByChildren(featureNames);
+                        if (groupId != null) {
+                            featureGraph.highlightNodes(featureGraph.computeGroupHighlightSet(groupId));
+                        } else {
+                            Set<String> ids = new HashSet<>(featureNames);
+                            ids.add(group.getParent().getName());
+                            featureGraph.highlightNodes(ids);
+                        }
+                    } else if (constraint instanceof SimpleConstraint) {
+                        SimpleConstraint sc = (SimpleConstraint) constraint;
+                        Set<String> ids = new HashSet<>();
+                        ids.add(sc.getFeature1().getName());
+                        ids.add(sc.getFeature2().getName());
+                        featureGraph.highlightNodes(ids);
+                    }
+                }
             }
         });		
 	}
@@ -627,10 +655,11 @@ public class ConstraintsViewController {
 			this.features = features;
 			currentBase = base;
 		}
-	
-		if(featureGraph == null) {
-			featureGraph = mainController.getFeatureGraph();
-		}
+
+        if(featureGraph == null) {
+            featureGraph = mainController.getFeatureGraph();
+            featureGraph.addGroupSelectionListener(parentId -> selectAndScrollToGroup(parentId));
+        }
 		
 		featureGraph.updateGraph(base);
 		
@@ -715,7 +744,33 @@ public class ConstraintsViewController {
 	    });
 		
 	}
-	
+
+    public void selectAndScrollToGroup(String groupId) {
+        Set<String> targetNames = featureGraph.getGroupChildFeatureNames(groupId);
+        if (targetNames.isEmpty()) return;
+
+        TreeItem<Constraint> match = groupTreeView.getRoot().getChildren().stream()
+                .filter(item -> item.getValue() instanceof Group)
+                .filter(item -> {
+                    Group g = (Group) item.getValue();
+                    Set<String> names = g.getFeatures().stream()
+                            .map(Feature::getName)
+                            .collect(Collectors.toSet());
+                    return names.equals(targetNames);
+                })
+                .findFirst()
+                .orElse(null);
+        if (match == null) return;
+
+        isSelectingFromGraph = true;
+        groupTreeView.getSelectionModel().clearSelection();
+        groupTreeView.getSelectionModel().select(match);
+        int row = groupTreeView.getRow(match);
+        if (row >= 0) {
+            groupTreeView.scrollTo(row);
+        }
+        isSelectingFromGraph = false;
+    }
 	/*
 	 * Helper method for finding all display items that contain a specific feature
 	 */
